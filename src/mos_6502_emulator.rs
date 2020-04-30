@@ -96,13 +96,12 @@ impl Mos6502Cpu {
 
     Mos6502Cpu {
       bus,
-      accumulator: 0, // A
-      x_index: 0,     // X
-      y_index: 0,     // Y
-      //
+      accumulator: 0,
+      x_index: 0,
+      y_index: 0,
       program_counter,
-      stack_pointer: 0xFD,   // S
-      status_register: 0x34, // P
+      stack_pointer: 0xFD,
+      status_register: 0x34,
       cycles: 0,
     }
   }
@@ -124,23 +123,49 @@ impl Mos6502Cpu {
   fn tick(&mut self) {
     let opcode = self.next_u8();
     match opcode {
-      0x01 => self.ora(Mode::IndirectX, 6, false),
-      0x05 => self.ora(Mode::ZeroPage, 3, false),
-      0x09 => self.ora(Mode::Immediate, 2, false),
-      0x0d => self.ora(Mode::Absolute, 4, false),
-      0x11 => self.ora(Mode::IndirectY, 5, true),
-      0x15 => self.ora(Mode::ZeroPageX, 4, false),
-      0x19 => self.ora(Mode::AbsoluteIndexedY, 4, true),
-      0x1d => self.ora(Mode::AbsoluteIndexedX, 4, true),
+      // Logical operators
+      0x01 => self.ora(Mode::IndirectX, 6, 0),
+      0x05 => self.ora(Mode::ZeroPage, 3, 0),
+      0x09 => self.ora(Mode::Immediate, 2, 0),
+      0x0d => self.ora(Mode::Absolute, 4, 0),
+      0x11 => self.ora(Mode::IndirectY, 5, 1),
+      0x15 => self.ora(Mode::ZeroPageX, 4, 0),
+      0x19 => self.ora(Mode::AbsoluteIndexedY, 4, 1),
+      0x1d => self.ora(Mode::AbsoluteIndexedX, 4, 1),
 
-      0xa1 => self.lda(Mode::IndirectX, 6, false),
-      0xa5 => self.lda(Mode::ZeroPage, 3, false),
-      0xa9 => self.lda(Mode::Immediate, 2, false),
-      0xad => self.lda(Mode::Absolute, 4, false),
-      0xb1 => self.lda(Mode::IndirectY, 5, true),
-      0xb5 => self.lda(Mode::ZeroPageX, 4, false),
-      0xb9 => self.lda(Mode::AbsoluteIndexedY, 4, true),
-      0xbd => self.lda(Mode::AbsoluteIndexedX, 4, true),
+      0x21 => self.and(Mode::IndirectX, 6, 0),
+      0x25 => self.and(Mode::ZeroPage, 3, 0),
+      0x29 => self.and(Mode::Immediate, 2, 0),
+      0x2d => self.and(Mode::Absolute, 4, 0),
+      0x31 => self.and(Mode::IndirectY, 5, 1),
+      0x35 => self.and(Mode::ZeroPageX, 4, 0),
+      0x39 => self.and(Mode::AbsoluteIndexedY, 4, 1),
+      0x3d => self.and(Mode::AbsoluteIndexedX, 4, 1),
+      //   AND,
+      //   EOR,
+      //   ADC,
+      //   SBC,
+      //   CMP,
+      //   CPX,
+      //   CPY,
+      //   DEC,
+      //   DEX,
+      //   DEY,
+      //   INC,
+      //   INX,
+      //   INY,
+      //   ASL,
+      //   ROL,
+      //   LSR,
+      //   ROR,
+      0xa1 => self.lda(Mode::IndirectX, 6, 0),
+      0xa5 => self.lda(Mode::ZeroPage, 3, 0),
+      0xa9 => self.lda(Mode::Immediate, 2, 0),
+      0xad => self.lda(Mode::Absolute, 4, 0),
+      0xb1 => self.lda(Mode::IndirectY, 5, 1),
+      0xb5 => self.lda(Mode::ZeroPageX, 4, 0),
+      0xb9 => self.lda(Mode::AbsoluteIndexedY, 4, 1),
+      0xbd => self.lda(Mode::AbsoluteIndexedX, 4, 1),
 
       _ => panic!("Unhandled opcode {}", opcode),
     }
@@ -159,7 +184,7 @@ impl Mos6502Cpu {
 
   /// The source for the comments on the modes is coming from:
   /// http://www.emulator101.com/6502-addressing-modes.html
-  fn get_operand_address(&mut self, mode: Mode, _incur_extra_cycle_on_page_boundary: bool) -> u16 {
+  fn get_operand_address(&mut self, mode: Mode, page_boundary_cycle: u8) -> u16 {
     match mode {
       // Absolute addressing specifies the memory location explicitly in the two bytes
       // following the opcode. So JMP $4032 will set the PC to $4032. The hex for
@@ -181,10 +206,16 @@ impl Mos6502Cpu {
       //    DEY         ; Decrement Y
       //    BPL loop    ; Loop until Y is 0
       Mode::AbsoluteIndexedX => {
-        return self.next_u16() + self.x_index as u16;
+        let base_address = self.next_u16();
+        let offset_address = base_address + self.x_index as u16;
+        self.incur_extra_cycle_on_page_boundary(base_address, offset_address, page_boundary_cycle);
+        return offset_address;
       }
       Mode::AbsoluteIndexedY => {
-        return self.next_u16() + self.y_index as u16;
+        let base_address = self.next_u16();
+        let offset_address = base_address + self.y_index as u16;
+        self.incur_extra_cycle_on_page_boundary(base_address, offset_address, page_boundary_cycle);
+        return offset_address;
       }
       // These instructions have their data defined as the next byte after the
       // opcode. ORA #$B2 will perform a logical (also called bitwise) of the
@@ -203,8 +234,12 @@ impl Mos6502Cpu {
       // to clear the processor's Carry flag.
       Mode::Implied => panic!("An implied mode should never be directly activated."),
       Mode::Indirect => panic!("Unhandled mode."),
-      Mode::IndirectX => panic!("Unhandled mode."),
-      Mode::IndirectY => panic!("Unhandled mode."),
+      Mode::IndirectX => {
+        panic!("Unhandled mode. Incurs an extra cycle if crossing a page boundary.")
+      }
+      Mode::IndirectY => {
+        panic!("Unhandled mode. Incurs an extra cycle if crossing a page boundary.")
+      }
       // Relative addressing on the 6502 is only used for branch operations. The byte
       // after the opcode is the branch offset. If the branch is taken, the new address
       // will the the current PC plus the offset. The offset is a signed byte, so it can
@@ -232,13 +267,37 @@ impl Mos6502Cpu {
     }
   }
 
+  fn incur_extra_cycle_on_page_boundary(
+    &mut self,
+    base_address: u16,
+    offset_address: u16,
+    extra_cycles: u8,
+  ) {
+    let [_, base_page] = base_address.to_le_bytes();
+    let [_, offset_page] = offset_address.to_le_bytes();
+    if base_page != offset_page {
+      self.cycles += extra_cycles;
+    }
+  }
+
   /// Apply the logical "or" operator on the accumulator.
   /// A:=A or {adr}
   /// Flags: NZ
-  fn ora(&mut self, mode: Mode, cycles: u8, incur_extra_cycle_on_page_boundary: bool) {
+  fn ora(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
     self.cycles += cycles;
-    let address = self.get_operand_address(mode, incur_extra_cycle_on_page_boundary);
+    let address = self.get_operand_address(mode, page_boundary_cycle);
     self.accumulator |= self.bus.read_u8(address);
+    self.update_zero_flag(self.accumulator);
+    self.update_negative_flag(self.accumulator);
+  }
+
+  /// Apply the logical "and" operator on the accumulator.
+  /// A:=A&{adr}
+  /// Flags: NZ
+  fn and(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
+    self.cycles += cycles;
+    let address = self.get_operand_address(mode, page_boundary_cycle);
+    self.accumulator &= self.bus.read_u8(address);
     self.update_zero_flag(self.accumulator);
     self.update_negative_flag(self.accumulator);
   }
@@ -246,9 +305,9 @@ impl Mos6502Cpu {
   /// Load the value into register A
   /// A:={adr}
   /// Flags: NZ
-  fn lda(&mut self, mode: Mode, cycles: u8, incur_extra_cycle_on_page_boundary: bool) {
+  fn lda(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
     self.cycles += cycles;
-    let address = self.get_operand_address(mode, incur_extra_cycle_on_page_boundary);
+    let address = self.get_operand_address(mode, page_boundary_cycle);
     self.accumulator = self.bus.read_u8(address);
     self.update_zero_flag(self.accumulator);
     self.update_negative_flag(self.accumulator);
@@ -319,6 +378,28 @@ mod test {
         OpCode::LDA_imm as u8, // Load a value into the A register.
         a,                     // Here is the value, which is 1 byte.
         OpCode::ORA_imm as u8, // The | operator
+        b,                     // Now the operand for the operation
+      ],
+      |cpu| cpu.accumulator == result,
+    );
+
+    assert_eq!(cpu.accumulator, result, "cpu.accumulator");
+    assert_eq!(cpu.cycles, 4, "cpu.cycles");
+  }
+
+  #[test]
+  fn run_logical_and_on_the_a_register() {
+    let a = 0b1010_1010;
+    let b = 0b1111_0000;
+    let result = 0b1010_0000;
+
+    assert!(a & b == result, "Check out the assumption on the values");
+
+    let cpu = run_program_until(
+      vec![
+        OpCode::LDA_imm as u8, // Load a value into the A register.
+        a,                     // Here is the value, which is 1 byte.
+        OpCode::AND_imm as u8, // The | operator
         b,                     // Now the operand for the operation
       ],
       |cpu| cpu.accumulator == result,
