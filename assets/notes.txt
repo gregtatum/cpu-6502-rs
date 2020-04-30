@@ -1,0 +1,14 @@
+CPU Implementations:
+  https://github.com/fogleman/nes/blob/master/nes/cpu.go
+  https://github.com/pcwalton/sprocketnes/blob/master/src/cpu.rs
+  https://github.com/starrhorne/nes-rust/blob/master/src/cpu.rs
+  https://github.com/OneLoneCoder/olcNES/blob/master/Part%232%20-%20CPU/olc6502.h
+  https://github.com/OneLoneCoder/olcNES/blob/master/Part%232%20-%20CPU/olc6502.cpp
+
+Assembly Language:
+  http://www.gravelstudios.com/blog/nesassembly/
+  https://cc65.github.io/
+
+Other guides:
+  http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=Category:Guides
+  http://www.emulator101.com/
