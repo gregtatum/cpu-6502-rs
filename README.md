@@ -1,4 +1,4 @@
-# nes-rs
+# nes-rs (wip)
 
 This project is an attempt to create a NES emulator for fun.
 

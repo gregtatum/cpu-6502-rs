@@ -399,7 +399,7 @@ mod test {
       vec![
         OpCode::LDA_imm as u8, // Load a value into the A register.
         a,                     // Here is the value, which is 1 byte.
-        OpCode::AND_imm as u8, // The | operator
+        OpCode::AND_imm as u8, // The & operator
         b,                     // Now the operand for the operation
       ],
       |cpu| cpu.accumulator == result,
