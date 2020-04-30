@@ -1,38 +1,56 @@
+use super::constants::{memory_range,InterruptVectors};
 pub struct Bus {
   memory: [u8; 0xFFFF],
 }
 
 impl Bus {
-  pub fn read_word(&self, address: u16) -> u16 {
-    self.construct_word(address, address + 1)
+  pub fn new() -> Bus {
+    Bus {
+      // Little endian memory store.
+      memory: [0; 0xFFFF]
+    }
   }
 
-  fn construct_word(&self, address_a: u16, address_b: u16) -> u16 {
-    let a = self.memory[address_a as usize];
-    let b = self.memory[address_b as usize];
-    ((a as u16) << 8) | (b as u16)
-  }
-}
-
-pub mod memory_range {
-  pub struct Range {
-    pub min: u16,
-    pub max: u16,
+  pub fn read_u8(&self, address: u16) -> u8 {
+    self.memory[address as usize]
   }
 
-  // 2KB internal RAM
-  pub const RAM: Range = Range {min: 0x0000, max: 0x07FF};
-  // These addresses just look up RAM.
-  pub const RAM_MIRROR_1: Range = Range {min: 0x0800, max: 0x0FFF};
-  pub const RAM_MIRROR_2: Range = Range {min: 0x1000, max: 0x17FF};
-  pub const RAM_MIRROR_3: Range = Range {min: 0x1800, max: 0x1FFF};
-  pub const PPU_REGISTERS: Range = Range {min: 0x2000, max: 0x2007};
-  // These mirror the ppu registers every 8 bytes.
-  pub const PPU_REGISTER_MIRRORS: Range = Range {min: 0x2008, max: 0x3FFF};
-  pub const APU_AND_IO_REGISTERES: Range = Range {min: 0x4000, max: 0x4017};
-  // APU and I/O functionality that is normally disabled. See CPU Test Mode.
-  pub const DISABLED_APU_IO_FEATURES: Range = Range {min: 0x4018, max: 0x401F};
-  // Cartridge space: PRG ROM, PRG RAM, and mapper registers (See Note)
-  // Size: 0xBFE0
-  pub const CARTRIDGE_SPACE: Range = Range {min: 0x4020, max: 0xFFFF};
+  pub fn read_u16(&self, address: u16) -> u16 {
+    self.read_u16_disjoint(address, address + 1)
+  }
+
+  /**
+   * Words are little endian. Use rust's built-in features rather than relying on
+   * bit shifting.
+   *
+   * e.g.
+   * Little-Endian:  0x1000  00 10
+   *    Big-Endian:  0x1000  10 00
+   */
+  pub fn read_u16_disjoint(&self, address_a: u16, address_b: u16) -> u16 {
+    let a = self.read_u8(address_a);
+    let b = self.read_u8(address_b);
+    u16::from_le_bytes([a, b])
+  }
+
+  pub fn set_u16(&mut self, address: u16, value: u16) {
+    let [a, b] = value.to_le_bytes();
+    self.memory[address as usize] = a;
+    self.memory[address as usize + 1] = b;
+  }
+
+  pub fn load_program(&mut self, program: &Vec<u8>) {
+    if program.len() > memory_range::CARTRIDGE_SPACE.size() as usize {
+      panic!("Attempting to load a program that is larger than the cartridge space.");
+    }
+
+    // Copy the memory into the buffer.
+    for (index, value) in program.iter().enumerate() {
+      self.memory[memory_range::CARTRIDGE_SPACE.min as usize + index] = *value;
+    }
+
+    // TODO - For now set the start of the execution to the beginning byte of
+    // the program.
+    self.set_u16(InterruptVectors::ResetVector as u16, memory_range::CARTRIDGE_SPACE.min);
+  }
 }

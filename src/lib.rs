@@ -3,3 +3,5 @@
 
 pub mod mos_6502_emulator;
 pub mod bus;
+pub mod opcodes;
+pub mod constants;
