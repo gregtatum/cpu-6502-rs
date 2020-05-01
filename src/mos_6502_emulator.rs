@@ -22,18 +22,19 @@ pub enum StatusFlag {
 }
 
 pub enum Mode {
-  Absolute,         // ABS
-  AbsoluteIndexedX, // ABX
-  AbsoluteIndexedY, // ABY
-  Immediate,        // IMM
-  Implied,          // IMP
-  Indirect,         // IND
-  IndirectX,        // IZX
-  IndirectY,        // IZY
-  Relative,         // REL
-  ZeroPage,         // ZP
-  ZeroPageX,        // ZPX
-  ZeroPageY,        // ZPY
+  Absolute,         // abs
+  AbsoluteIndexedX, // abx
+  AbsoluteIndexedY, // aby
+  Immediate,        // imm
+  Implied,          // imp
+  Indirect,         // ind
+  IndirectX,        // izx
+  IndirectY,        // izy
+  Relative,         // rel
+  ZeroPage,         // zp
+  ZeroPageX,        // zpx
+  ZeroPageY,        // zpy
+  None,             // non - This last one is fake.
 }
 
 pub enum ExtraCycle {
@@ -87,6 +88,208 @@ pub struct Mos6502Cpu {
   /// the commands.
   cycles: u8,
 }
+
+macro_rules! mode_to_type {
+  (abs) => {
+    Mode::Absolute
+  };
+  (abx) => {
+    Mode::AbsoluteIndexedX
+  };
+  (aby) => {
+    Mode::AbsoluteIndexedY
+  };
+  (imm) => {
+    Mode::Immediate
+  };
+  (imp) => {
+    Mode::Implied
+  };
+  (ind) => {
+    Mode::Indirect
+  };
+  (izx) => {
+    Mode::IndirectX
+  };
+  (izy) => {
+    Mode::IndirectY
+  };
+  (rel) => {
+    Mode::Relative
+  };
+  (zp) => {
+    Mode::ZeroPage
+  };
+  (zpx) => {
+    Mode::ZeroPageX
+  };
+  (zpy) => {
+    Mode::ZeroPageY
+  };
+  (non) => {
+    Mode::None
+  };
+}
+
+/// Usage:
+/// match_opcode!(opcode, [
+///   { 0x00, BRK, non, 7, 0 },
+/// ]);
+macro_rules! match_opcode {
+  (
+    $self:expr,
+    $opcode:expr,
+    [
+      $({
+        $byte:expr,
+        $op_name:ident,
+        $addressing_mode:ident,
+        $cycles:expr,
+        $extra_cycles:expr
+      }),*
+    ]
+  ) => {
+      {
+          match $opcode {
+            $(
+                // 0x01 => self.ora(Mode::IndirectX, 6, 0),
+                $byte => $self.$op_name(mode_to_type!($addressing_mode), $cycles, $extra_cycles),
+            )*
+          }
+      }
+  };
+}
+
+macro_rules! define_op {
+  (
+    $op:ident,
+    $docs:expr,
+    [$( $flag:ident ),*],
+    $fn_impl:expr
+  ) => {
+    fn $op(cpu: &mut Mos6502Cpu, mode: Mode, cycles: u8, extra_cycle: u8) {
+      cpu.cycles += cycles;
+      $fn_impl
+    }
+  };
+}
+
+define_op!(ora, "A:=A or {adr}", [N, Z], {
+  let address = cpu.get_operand_address(mode, extra_cycle);
+  cpu.accumulator |= cpu.bus.read_u8(address);
+  cpu.update_zero_flag(cpu.accumulator);
+  cpu.update_negative_flag(cpu.accumulator);
+});
+
+define_op!(and, "A:=A&{adr}", [N, Z], {});
+
+define_op!(eor, "A:=A exor {adr}", [N, Z], {});
+
+define_op!(adc, "A:=A+{adr}", [N, V, Z, C], {});
+
+define_op!(sbc, "A:=A-{adr}", [N, V, Z, C], {});
+
+define_op!(cmp, "A-{adr}", [N, Z, C], {});
+
+define_op!(cpx, "X-{adr}", [N, Z, C], {});
+
+define_op!(cpy, "Y-{adr}", [N, Z, C], {});
+
+define_op!(dec, "{adr}:={adr}-1", [N, Z], {});
+
+define_op!(dex, "X:=X-1", [N, Z], {});
+
+define_op!(dey, "Y:=Y-1", [N, Z], {});
+
+define_op!(inc, "{adr}:={adr}+1", [N, Z], {});
+
+define_op!(inx, "X:=X+1", [N, Z], {});
+
+define_op!(iny, "Y:=Y+1", [N, Z], {});
+
+define_op!(asl, "{adr}:={adr}*2", [N, Z, C], {});
+
+define_op!(rol, "{adr}:={adr}*2+C", [N, Z, C], {});
+
+define_op!(lsr, "{adr}:={adr}/2", [N, Z, C], {});
+
+define_op!(ror, "{adr}:={adr}/2+C*128", [N, Z, C], {});
+
+define_op!(lda, "A:={adr}", [N, Z], {});
+
+define_op!(sta, "{adr}:=A", [], {});
+
+define_op!(ldx, "X:={adr}", [N, Z], {});
+
+define_op!(stx, "{adr}:=X", [], {});
+
+define_op!(ldy, "Y:={adr}", [N, Z], {});
+
+define_op!(sty, "{adr}:=Y", [], {});
+
+define_op!(tax, "X:=A", [N, Z], {});
+
+define_op!(txa, "A:=X", [N, Z], {});
+
+define_op!(tay, "Y:=A", [N, Z], {});
+
+define_op!(tya, "A:=Y", [N, Z], {});
+
+define_op!(tsx, "X:=S", [N, Z], {});
+
+define_op!(txs, "S:=X", [], {});
+
+define_op!(pla, "A:=+(S)", [N, Z], {});
+
+define_op!(pha, "(S)-:=A", [], {});
+
+define_op!(plp, "P:=+(S)", [N, V, D, I, Z, C], {});
+
+define_op!(php, "(S)-:=P", [], {});
+
+define_op!(bpl, "branch on N=0", [], {});
+
+define_op!(bmi, "branch on N=1", [], {});
+
+define_op!(bvc, "branch on V=0", [], {});
+
+define_op!(bvs, "branch on V=1", [], {});
+
+define_op!(bcc, "branch on C=0", [], {});
+
+define_op!(bcs, "branch on C=1", [], {});
+
+define_op!(bne, "branch on Z=0", [], {});
+
+define_op!(beq, "branch on Z=1", [], {});
+
+define_op!(brk, "(S)-:=PC,P PC:=($FFFE)", [B, I], {});
+
+define_op!(rti, "P,PC:=+(S)", [N, V, D, I, Z, C], {});
+
+define_op!(jsr, "(S)-:=PC PC:={adr}", [], {});
+
+define_op!(rts, "PC:=+(S)", [], {});
+
+define_op!(jmp, "PC:={adr}", [], {});
+
+define_op!(bit, "N:=b7 V:=b6 Z:=A&{adr}", [N, V, Z], {});
+
+define_op!(clc, "C:=0", [C], {});
+
+define_op!(sec, "C:=1", [C], {});
+
+define_op!(cld, "D:=0", [D], {});
+
+define_op!(sed, "D:=1", [D], {});
+
+define_op!(cli, "I:=0", [I], {});
+
+define_op!(sei, "I:=1", [I], {});
+
+define_op!(clv, "V:=0", [V], {});
+
+define_op!(nop, "", [], {});
 
 impl Mos6502Cpu {
   fn new(bus: Bus) -> Mos6502Cpu {
@@ -278,6 +481,268 @@ impl Mos6502Cpu {
     if base_page != offset_page {
       self.cycles += extra_cycles;
     }
+  }
+
+  fn tick2(&mut self) {
+    let opcode = self.next_u8();
+    match_opcode!(self, opcode, [
+      { 0x00, brk, non, 7, 0 },
+      { 0x01, ora, izx, 6, 0 },
+      { 0x02, kil, non, 0, 0 },
+      { 0x03, slo, izx, 8, 0 },
+      { 0x04, nop, zp,  3, 0 },
+      { 0x05, ora, zp,  3, 0 },
+      { 0x06, asl, zp,  5, 0 },
+      { 0x07, slo, zp,  5, 0 },
+      { 0x08, php, non, 3, 0 },
+      { 0x09, ora, imm, 2, 0 },
+      { 0x0a, asl, non, 2, 0 },
+      { 0x0b, anc, imm, 2, 0 },
+      { 0x0c, nop, abs, 4, 0 },
+      { 0x0d, ora, abs, 4, 0 },
+      { 0x0e, asl, abs, 6, 0 },
+      { 0x0f, slo, abs, 6, 0 },
+      { 0x10, bpl, rel, 2, 0 },
+      { 0x11, ora, izy, 5, 0 },
+      { 0x12, kil, non, 0, 0 },
+      { 0x13, slo, izy, 8, 0 },
+      { 0x14, nop, zpx, 4, 0 },
+      { 0x15, ora, zpx, 4, 0 },
+      { 0x16, asl, zpx, 6, 0 },
+      { 0x17, slo, zpx, 6, 0 },
+      { 0x18, clc, non, 2, 0 },
+      { 0x19, ora, aby, 4, 0 },
+      { 0x1a, nop, non, 2, 0 },
+      { 0x1b, slo, aby, 7, 0 },
+      { 0x1c, nop, abx, 4, 0 },
+      { 0x1d, ora, abx, 4, 0 },
+      { 0x1e, asl, abx, 7, 0 },
+      { 0x1f, slo, abx, 7, 0 },
+      { 0x20, jsr, abs, 6, 0 },
+      { 0x21, and, izx, 6, 0 },
+      { 0x22, kil, non, 0, 0 },
+      { 0x23, rla, izx, 8, 0 },
+      { 0x24, bit, zp,  3, 0 },
+      { 0x25, and, zp,  3, 0 },
+      { 0x26, rol, zp,  5, 0 },
+      { 0x27, rla, zp,  5, 0 },
+      { 0x28, plp, non, 4, 0 },
+      { 0x29, and, imm, 2, 0 },
+      { 0x2a, rol, non, 2, 0 },
+      { 0x2b, anc, imm, 2, 0 },
+      { 0x2c, bit, abs, 4, 0 },
+      { 0x2d, and, abs, 4, 0 },
+      { 0x2e, rol, abs, 6, 0 },
+      { 0x2f, rla, abs, 6, 0 },
+      { 0x30, bmi, rel, 2, 0 },
+      { 0x31, and, izy, 5, 0 },
+      { 0x32, kil, non, 0, 0 },
+      { 0x33, rla, izy, 8, 0 },
+      { 0x34, nop, zpx, 4, 0 },
+      { 0x35, and, zpx, 4, 0 },
+      { 0x36, rol, zpx, 6, 0 },
+      { 0x37, rla, zpx, 6, 0 },
+      { 0x38, sec, non, 2, 0 },
+      { 0x39, and, aby, 4, 0 },
+      { 0x3a, nop, non, 2, 0 },
+      { 0x3b, rla, aby, 7, 0 },
+      { 0x3c, nop, abx, 4, 0 },
+      { 0x3d, and, abx, 4, 0 },
+      { 0x3e, rol, abx, 7, 0 },
+      { 0x3f, rla, abx, 7, 0 },
+      { 0x40, rti, non, 6, 0 },
+      { 0x41, eor, izx, 6, 0 },
+      { 0x42, kil, non, 0, 0 },
+      { 0x43, sre, izx, 8, 0 },
+      { 0x44, nop, zp,  3, 0 },
+      { 0x45, eor, zp,  3, 0 },
+      { 0x46, lsr, zp,  5, 0 },
+      { 0x47, sre, zp,  5, 0 },
+      { 0x48, pha, non, 3, 0 },
+      { 0x49, eor, imm, 2, 0 },
+      { 0x4a, lsr, non, 2, 0 },
+      { 0x4b, alr, imm, 2, 0 },
+      { 0x4c, jmp, abs, 3, 0 },
+      { 0x4d, eor, abs, 4, 0 },
+      { 0x4e, lsr, abs, 6, 0 },
+      { 0x4f, sre, abs, 6, 0 },
+      { 0x50, bvc, rel, 2, 0 },
+      { 0x51, eor, izy, 5, 0 },
+      { 0x52, kil, non, 0, 0 },
+      { 0x53, sre, izy, 8, 0 },
+      { 0x54, nop, zpx, 4, 0 },
+      { 0x55, eor, zpx, 4, 0 },
+      { 0x56, lsr, zpx, 6, 0 },
+      { 0x57, sre, zpx, 6, 0 },
+      { 0x58, cli, non, 2, 0 },
+      { 0x59, eor, aby, 4, 0 },
+      { 0x5a, nop, non, 2, 0 },
+      { 0x5b, sre, aby, 7, 0 },
+      { 0x5c, nop, abx, 4, 0 },
+      { 0x5d, eor, abx, 4, 0 },
+      { 0x5e, lsr, abx, 7, 0 },
+      { 0x5f, sre, abx, 7, 0 },
+      { 0x60, rts, non, 6, 0 },
+      { 0x61, adc, izx, 6, 0 },
+      { 0x62, kil, non, 0, 0 },
+      { 0x63, rra, izx, 8, 0 },
+      { 0x64, nop, zp,  3, 0 },
+      { 0x65, adc, zp,  3, 0 },
+      { 0x66, ror, zp,  5, 0 },
+      { 0x67, rra, zp,  5, 0 },
+      { 0x68, pla, non, 4, 0 },
+      { 0x69, adc, imm, 2, 0 },
+      { 0x6a, ror, non, 2, 0 },
+      { 0x6b, arr, imm, 2, 0 },
+      { 0x6c, jmp, ind, 5, 0 },
+      { 0x6d, adc, abs, 4, 0 },
+      { 0x6e, ror, abs, 6, 0 },
+      { 0x6f, rra, abs, 6, 0 },
+      { 0x70, bvs, rel, 2, 0 },
+      { 0x71, adc, izy, 5, 0 },
+      { 0x72, kil, non, 0, 0 },
+      { 0x73, rra, izy, 8, 0 },
+      { 0x74, nop, zpx, 4, 0 },
+      { 0x75, adc, zpx, 4, 0 },
+      { 0x76, ror, zpx, 6, 0 },
+      { 0x77, rra, zpx, 6, 0 },
+      { 0x78, sei, non, 2, 0 },
+      { 0x79, adc, aby, 4, 0 },
+      { 0x7a, nop, non, 2, 0 },
+      { 0x7b, rra, aby, 7, 0 },
+      { 0x7c, nop, abx, 4, 0 },
+      { 0x7d, adc, abx, 4, 0 },
+      { 0x7e, ror, abx, 7, 0 },
+      { 0x7f, rra, abx, 7, 0 },
+      { 0x80, nop, imm, 2, 0 },
+      { 0x81, sta, izx, 6, 0 },
+      { 0x82, nop, imm, 2, 0 },
+      { 0x83, sax, izx, 6, 0 },
+      { 0x84, sty, zp,  3, 0 },
+      { 0x85, sta, zp,  3, 0 },
+      { 0x86, stx, zp,  3, 0 },
+      { 0x87, sax, zp,  3, 0 },
+      { 0x88, dey, non, 2, 0 },
+      { 0x89, nop, imm, 2, 0 },
+      { 0x8a, txa, non, 2, 0 },
+      { 0x8b, xaa, imm, 2, 0 },
+      { 0x8c, sty, abs, 4, 0 },
+      { 0x8d, sta, abs, 4, 0 },
+      { 0x8e, stx, abs, 4, 0 },
+      { 0x8f, sax, abs, 4, 0 },
+      { 0x90, bcc, rel, 2, 0 },
+      { 0x91, sta, izy, 6, 0 },
+      { 0x92, kil, non, 0, 0 },
+      { 0x93, ahx, izy, 6, 0 },
+      { 0x94, sty, zpx, 4, 0 },
+      { 0x95, sta, zpx, 4, 0 },
+      { 0x96, stx, zpy, 4, 0 },
+      { 0x97, sax, zpy, 4, 0 },
+      { 0x98, tya, non, 2, 0 },
+      { 0x99, sta, aby, 5, 0 },
+      { 0x9a, txs, non, 2, 0 },
+      { 0x9b, tas, aby, 5, 0 },
+      { 0x9c, shy, abx, 5, 0 },
+      { 0x9d, sta, abx, 5, 0 },
+      { 0x9e, shx, aby, 5, 0 },
+      { 0x9f, ahx, aby, 5, 0 },
+      { 0xa0, ldy, imm, 2, 0 },
+      { 0xa1, lda, izx, 6, 0 },
+      { 0xa2, ldx, imm, 2, 0 },
+      { 0xa3, lax, izx, 6, 0 },
+      { 0xa4, ldy, zp,  3, 0 },
+      { 0xa5, lda, zp,  3, 0 },
+      { 0xa6, ldx, zp,  3, 0 },
+      { 0xa7, lax, zp,  3, 0 },
+      { 0xa8, tay, non, 2, 0 },
+      { 0xa9, lda, imm, 2, 0 },
+      { 0xaa, tax, non, 2, 0 },
+      { 0xab, lax, imm, 2, 0 },
+      { 0xac, ldy, abs, 4, 0 },
+      { 0xad, lda, abs, 4, 0 },
+      { 0xae, ldx, abs, 4, 0 },
+      { 0xaf, lax, abs, 4, 0 },
+      { 0xb0, bcs, rel, 2, 0 },
+      { 0xb1, lda, izy, 5, 0 },
+      { 0xb2, kil, non, 0, 0 },
+      { 0xb3, lax, izy, 5, 0 },
+      { 0xb4, ldy, zpx, 4, 0 },
+      { 0xb5, lda, zpx, 4, 0 },
+      { 0xb6, ldx, zpy, 4, 0 },
+      { 0xb7, lax, zpy, 4, 0 },
+      { 0xb8, clv, non, 2, 0 },
+      { 0xb9, lda, aby, 4, 0 },
+      { 0xba, tsx, non, 2, 0 },
+      { 0xbb, las, aby, 4, 0 },
+      { 0xbc, ldy, abx, 4, 0 },
+      { 0xbd, lda, abx, 4, 0 },
+      { 0xbe, ldx, aby, 4, 0 },
+      { 0xbf, lax, aby, 4, 0 },
+      { 0xc0, cpy, imm, 2, 0 },
+      { 0xc1, cmp, izx, 6, 0 },
+      { 0xc2, nop, imm, 2, 0 },
+      { 0xc3, dcp, izx, 8, 0 },
+      { 0xc4, cpy, zp,  3, 0 },
+      { 0xc5, cmp, zp,  3, 0 },
+      { 0xc6, dec, zp,  5, 0 },
+      { 0xc7, dcp, zp,  5, 0 },
+      { 0xc8, iny, non, 2, 0 },
+      { 0xc9, cmp, imm, 2, 0 },
+      { 0xca, dex, non, 2, 0 },
+      { 0xcb, axs, imm, 2, 0 },
+      { 0xcc, cpy, abs, 4, 0 },
+      { 0xcd, cmp, abs, 4, 0 },
+      { 0xce, dec, abs, 6, 0 },
+      { 0xcf, dcp, abs, 6, 0 },
+      { 0xd0, bne, rel, 2, 0 },
+      { 0xd1, cmp, izy, 5, 0 },
+      { 0xd2, kil, non, 0, 0 },
+      { 0xd3, dcp, izy, 8, 0 },
+      { 0xd4, nop, zpx, 4, 0 },
+      { 0xd5, cmp, zpx, 4, 0 },
+      { 0xd6, dec, zpx, 6, 0 },
+      { 0xd7, dcp, zpx, 6, 0 },
+      { 0xd8, cld, non, 2, 0 },
+      { 0xd9, cmp, aby, 4, 0 },
+      { 0xda, nop, non, 2, 0 },
+      { 0xdb, dcp, aby, 7, 0 },
+      { 0xdc, nop, abx, 4, 0 },
+      { 0xdd, cmp, abx, 4, 0 },
+      { 0xde, dec, abx, 7, 0 },
+      { 0xdf, dcp, abx, 7, 0 },
+      { 0xe0, cpx, imm, 2, 0 },
+      { 0xe1, sbc, izx, 6, 0 },
+      { 0xe2, nop, imm, 2, 0 },
+      { 0xe3, isc, izx, 8, 0 },
+      { 0xe4, cpx, zp,  3, 0 },
+      { 0xe5, sbc, zp,  3, 0 },
+      { 0xe6, inc, zp,  5, 0 },
+      { 0xe7, isc, zp,  5, 0 },
+      { 0xe8, inx, non, 2, 0 },
+      { 0xe9, sbc, imm, 2, 0 },
+      { 0xea, nop, non, 2, 0 },
+      { 0xeb, sbc, imm, 2, 0 },
+      { 0xec, cpx, abs, 4, 0 },
+      { 0xed, sbc, abs, 4, 0 },
+      { 0xee, inc, abs, 6, 0 },
+      { 0xef, isc, abs, 6, 0 },
+      { 0xf0, beq, rel, 2, 0 },
+      { 0xf1, sbc, izy, 5, 0 },
+      { 0xf2, kil, non, 0, 0 },
+      { 0xf3, isc, izy, 8, 0 },
+      { 0xf4, nop, zpx, 4, 0 },
+      { 0xf5, sbc, zpx, 4, 0 },
+      { 0xf6, inc, zpx, 6, 0 },
+      { 0xf7, isc, zpx, 6, 0 },
+      { 0xf8, sed, non, 2, 0 },
+      { 0xf9, sbc, aby, 4, 0 },
+      { 0xfa, nop, non, 2, 0 },
+      { 0xfb, isc, aby, 7, 0 },
+      { 0xfc, nop, abx, 4, 0 },
+      { 0xfd, sbc, abx, 4, 0 },
+      { 0xfe, inc, abx, 7, 0 },
+      { 0xff, isc, abx, 7, 0 }
+    ]);
   }
 
   /// Apply the logical "or" operator on the accumulator.
