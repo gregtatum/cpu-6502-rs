@@ -1,5 +1,5 @@
-use super::bus::Bus;
-use super::constants::InterruptVectors;
+use crate::bus::Bus;
+use crate::constants::{memory_range, InterruptVectors};
 mod opcodes_illegal;
 mod opcodes_jump;
 mod opcodes_logical;
@@ -76,7 +76,13 @@ pub struct Mos6502Cpu {
   pc: u16,
 
   /// "S" - Stack pointer
-  /// is byte-wide and can be accessed using interrupts, pulls, pushes, and transfers.
+  ///
+  /// The 6502 has hardware support for a stack implemented using a 256-byte array
+  /// whose location is hardcoded at page 0x01 (0x0100-0x01FF), using the S register
+  /// for a stack pointer.
+  ///
+  /// The 6502 uses a descending stack (it grows downwards)
+  /// https://wiki.nesdev.com/w/index.php/Stack
   s: u8,
 
   /// "P" - Status register.
@@ -193,8 +199,8 @@ impl Mos6502Cpu {
       y: 0,
       // The program counter.
       pc,
-      // Stack pointer
-      s: 0xFD,
+      // Stack pointer - It grows down, so initialize it at the top.
+      s: 0xFF,
       // Status register
       p: 0x34,
       cycles: 0,
@@ -618,6 +624,48 @@ impl Mos6502Cpu {
 
   fn get_carry(&self) -> u8 {
     self.p & (StatusFlag::Carry as u8)
+  }
+
+  /// This function implements pushing to the stack.
+  /// See the "S" register for more details.
+  fn push_stack_u8(&mut self, value: u8) {
+    // The stack page is hard coded.
+    let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
+    // The stack points to the next available memory.
+    self.bus.set_u8(address, value);
+    // Grow down only after setting the memory.
+    self.s = self.s.wrapping_sub(1);
+  }
+
+  /// This function implements pulling to the stack.
+  /// See the "S" register for more details.
+  fn pull_stack_u8(&mut self) -> u8 {
+    // The current stack pointer points at available memory, decrement it first.
+    self.s = self.s.wrapping_add(1);
+    // Now read out the memory that is being pulled.
+    let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
+    self.bus.read_u8(address)
+  }
+
+  /// This function implements pushing to the stack.
+  /// See the "S" register for more details.
+  fn push_stack_u16(&mut self, value: u16) {
+    let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
+    // The stack points to the next available memory.
+    self.bus.set_u16(address, value);
+    // Grow down only after setting the memory.
+    self.s = self.s.wrapping_sub(2);
+  }
+
+  /// This function implements pulling to the stack.
+  /// See the "S" register for more details.
+  fn pull_stack_u16(&mut self) -> u16 {
+    // The current stack pointer points at available memory, decrement it first.
+    self.s = self.s.wrapping_add(2);
+    // Now read out the memory that is being pulled.
+    let stack_page = 0x01;
+    let address = u16::from_le_bytes([self.s, stack_page]);
+    self.bus.read_u16(address)
   }
 }
 
