@@ -1,4 +1,4 @@
-use super::constants::{memory_range,InterruptVectors};
+use super::constants::{memory_range, InterruptVectors};
 pub struct Bus {
   memory: [u8; 0xFFFF],
 }
@@ -7,7 +7,7 @@ impl Bus {
   pub fn new() -> Bus {
     Bus {
       // Little endian memory store.
-      memory: [0; 0xFFFF]
+      memory: [0; 0xFFFF],
     }
   }
 
@@ -33,6 +33,10 @@ impl Bus {
     u16::from_le_bytes([a, b])
   }
 
+  pub fn set_u8(&mut self, address: u16, value: u8) {
+    self.memory[address as usize] = value;
+  }
+
   pub fn set_u16(&mut self, address: u16, value: u16) {
     let [a, b] = value.to_le_bytes();
     self.memory[address as usize] = a;
@@ -51,6 +55,9 @@ impl Bus {
 
     // TODO - For now set the start of the execution to the beginning byte of
     // the program.
-    self.set_u16(InterruptVectors::ResetVector as u16, memory_range::CARTRIDGE_SPACE.min);
+    self.set_u16(
+      InterruptVectors::ResetVector as u16,
+      memory_range::CARTRIDGE_SPACE.min,
+    );
   }
 }

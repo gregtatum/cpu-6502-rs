@@ -1,5 +1,14 @@
 use super::bus::Bus;
 use super::constants::InterruptVectors;
+mod opcodes_illegal;
+mod opcodes_jump;
+mod opcodes_logical;
+mod opcodes_move;
+
+use opcodes_illegal::*;
+use opcodes_jump::*;
+use opcodes_logical::*;
+use opcodes_move::*;
 
 const CLOCK_SPEED: f64 = 1.789773; // Mhz
 const CLOCK_DIVISOR: u32 = 12; //Mhz
@@ -152,144 +161,16 @@ macro_rules! match_opcode {
       {
           match $opcode {
             $(
-                // 0x01 => self.ora(Mode::IndirectX, 6, 0),
-                $byte => $self.$op_name(mode_to_type!($addressing_mode), $cycles, $extra_cycles),
+                // 0x01 => ora(&mut self, Mode::IndirectX, 6, 0),
+                $byte => {
+                  $self.cycles += $cycles;
+                  $op_name($self, mode_to_type!($addressing_mode), $extra_cycles)
+                },
             )*
           }
       }
   };
 }
-
-macro_rules! define_op {
-  (
-    $op:ident,
-    $docs:expr,
-    [$( $flag:ident ),*],
-    $fn_impl:expr
-  ) => {
-    fn $op(cpu: &mut Mos6502Cpu, mode: Mode, cycles: u8, extra_cycle: u8) {
-      cpu.cycles += cycles;
-      $fn_impl
-    }
-  };
-}
-
-define_op!(ora, "A:=A or {adr}", [N, Z], {
-  let address = cpu.get_operand_address(mode, extra_cycle);
-  cpu.accumulator |= cpu.bus.read_u8(address);
-  cpu.update_zero_flag(cpu.accumulator);
-  cpu.update_negative_flag(cpu.accumulator);
-});
-
-define_op!(and, "A:=A&{adr}", [N, Z], {});
-
-define_op!(eor, "A:=A exor {adr}", [N, Z], {});
-
-define_op!(adc, "A:=A+{adr}", [N, V, Z, C], {});
-
-define_op!(sbc, "A:=A-{adr}", [N, V, Z, C], {});
-
-define_op!(cmp, "A-{adr}", [N, Z, C], {});
-
-define_op!(cpx, "X-{adr}", [N, Z, C], {});
-
-define_op!(cpy, "Y-{adr}", [N, Z, C], {});
-
-define_op!(dec, "{adr}:={adr}-1", [N, Z], {});
-
-define_op!(dex, "X:=X-1", [N, Z], {});
-
-define_op!(dey, "Y:=Y-1", [N, Z], {});
-
-define_op!(inc, "{adr}:={adr}+1", [N, Z], {});
-
-define_op!(inx, "X:=X+1", [N, Z], {});
-
-define_op!(iny, "Y:=Y+1", [N, Z], {});
-
-define_op!(asl, "{adr}:={adr}*2", [N, Z, C], {});
-
-define_op!(rol, "{adr}:={adr}*2+C", [N, Z, C], {});
-
-define_op!(lsr, "{adr}:={adr}/2", [N, Z, C], {});
-
-define_op!(ror, "{adr}:={adr}/2+C*128", [N, Z, C], {});
-
-define_op!(lda, "A:={adr}", [N, Z], {});
-
-define_op!(sta, "{adr}:=A", [], {});
-
-define_op!(ldx, "X:={adr}", [N, Z], {});
-
-define_op!(stx, "{adr}:=X", [], {});
-
-define_op!(ldy, "Y:={adr}", [N, Z], {});
-
-define_op!(sty, "{adr}:=Y", [], {});
-
-define_op!(tax, "X:=A", [N, Z], {});
-
-define_op!(txa, "A:=X", [N, Z], {});
-
-define_op!(tay, "Y:=A", [N, Z], {});
-
-define_op!(tya, "A:=Y", [N, Z], {});
-
-define_op!(tsx, "X:=S", [N, Z], {});
-
-define_op!(txs, "S:=X", [], {});
-
-define_op!(pla, "A:=+(S)", [N, Z], {});
-
-define_op!(pha, "(S)-:=A", [], {});
-
-define_op!(plp, "P:=+(S)", [N, V, D, I, Z, C], {});
-
-define_op!(php, "(S)-:=P", [], {});
-
-define_op!(bpl, "branch on N=0", [], {});
-
-define_op!(bmi, "branch on N=1", [], {});
-
-define_op!(bvc, "branch on V=0", [], {});
-
-define_op!(bvs, "branch on V=1", [], {});
-
-define_op!(bcc, "branch on C=0", [], {});
-
-define_op!(bcs, "branch on C=1", [], {});
-
-define_op!(bne, "branch on Z=0", [], {});
-
-define_op!(beq, "branch on Z=1", [], {});
-
-define_op!(brk, "(S)-:=PC,P PC:=($FFFE)", [B, I], {});
-
-define_op!(rti, "P,PC:=+(S)", [N, V, D, I, Z, C], {});
-
-define_op!(jsr, "(S)-:=PC PC:={adr}", [], {});
-
-define_op!(rts, "PC:=+(S)", [], {});
-
-define_op!(jmp, "PC:={adr}", [], {});
-
-define_op!(bit, "N:=b7 V:=b6 Z:=A&{adr}", [N, V, Z], {});
-
-define_op!(clc, "C:=0", [C], {});
-
-define_op!(sec, "C:=1", [C], {});
-
-define_op!(cld, "D:=0", [D], {});
-
-define_op!(sed, "D:=1", [D], {});
-
-define_op!(cli, "I:=0", [I], {});
-
-define_op!(sei, "I:=1", [I], {});
-
-define_op!(clv, "V:=0", [V], {});
-
-define_op!(nop, "", [], {});
 
 impl Mos6502Cpu {
   fn new(bus: Bus) -> Mos6502Cpu {
@@ -319,59 +200,6 @@ impl Mos6502Cpu {
     let value = self.bus.read_u16(self.program_counter);
     self.program_counter += 2;
     value
-  }
-
-  /// Handle individual instructions
-  /// https://github.com/munshkr/nesasm/blob/master/docs/cpu_inst.txt
-  fn tick(&mut self) {
-    let opcode = self.next_u8();
-    match opcode {
-      // Logical operators
-      0x01 => self.ora(Mode::IndirectX, 6, 0),
-      0x05 => self.ora(Mode::ZeroPage, 3, 0),
-      0x09 => self.ora(Mode::Immediate, 2, 0),
-      0x0d => self.ora(Mode::Absolute, 4, 0),
-      0x11 => self.ora(Mode::IndirectY, 5, 1),
-      0x15 => self.ora(Mode::ZeroPageX, 4, 0),
-      0x19 => self.ora(Mode::AbsoluteIndexedY, 4, 1),
-      0x1d => self.ora(Mode::AbsoluteIndexedX, 4, 1),
-
-      0x21 => self.and(Mode::IndirectX, 6, 0),
-      0x25 => self.and(Mode::ZeroPage, 3, 0),
-      0x29 => self.and(Mode::Immediate, 2, 0),
-      0x2d => self.and(Mode::Absolute, 4, 0),
-      0x31 => self.and(Mode::IndirectY, 5, 1),
-      0x35 => self.and(Mode::ZeroPageX, 4, 0),
-      0x39 => self.and(Mode::AbsoluteIndexedY, 4, 1),
-      0x3d => self.and(Mode::AbsoluteIndexedX, 4, 1),
-      //   AND,
-      //   EOR,
-      //   ADC,
-      //   SBC,
-      //   CMP,
-      //   CPX,
-      //   CPY,
-      //   DEC,
-      //   DEX,
-      //   DEY,
-      //   INC,
-      //   INX,
-      //   INY,
-      //   ASL,
-      //   ROL,
-      //   LSR,
-      //   ROR,
-      0xa1 => self.lda(Mode::IndirectX, 6, 0),
-      0xa5 => self.lda(Mode::ZeroPage, 3, 0),
-      0xa9 => self.lda(Mode::Immediate, 2, 0),
-      0xad => self.lda(Mode::Absolute, 4, 0),
-      0xb1 => self.lda(Mode::IndirectY, 5, 1),
-      0xb5 => self.lda(Mode::ZeroPageX, 4, 0),
-      0xb9 => self.lda(Mode::AbsoluteIndexedY, 4, 1),
-      0xbd => self.lda(Mode::AbsoluteIndexedX, 4, 1),
-
-      _ => panic!("Unhandled opcode {}", opcode),
-    }
   }
 
   /// This function is useful for testing the emulator. It will only run while the
@@ -467,7 +295,14 @@ impl Mos6502Cpu {
       // in the calculation of the target address.
       Mode::ZeroPageX => (self.next_u8() + self.x_index) as u16,
       Mode::ZeroPageY => (self.next_u8() + self.y_index) as u16,
+      Mode::None => panic!("Mode::None is attempting to be used."),
     }
+  }
+
+  fn get_operand(&mut self, mode: Mode, extra_cycle: u8) -> (u16, u8) {
+    let address = self.get_operand_address(mode, extra_cycle);
+    let value = self.bus.read_u8(address);
+    (address, value)
   }
 
   fn incur_extra_cycle_on_page_boundary(
@@ -483,7 +318,7 @@ impl Mos6502Cpu {
     }
   }
 
-  fn tick2(&mut self) {
+  fn tick(&mut self) {
     let opcode = self.next_u8();
     match_opcode!(self, opcode, [
       { 0x00, brk, non, 7, 0 },
@@ -745,45 +580,17 @@ impl Mos6502Cpu {
     ]);
   }
 
-  /// Apply the logical "or" operator on the accumulator.
-  /// A:=A or {adr}
-  /// Flags: NZ
-  fn ora(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
-    self.cycles += cycles;
-    let address = self.get_operand_address(mode, page_boundary_cycle);
-    self.accumulator |= self.bus.read_u8(address);
-    self.update_zero_flag(self.accumulator);
-    self.update_negative_flag(self.accumulator);
-  }
-
-  /// Apply the logical "and" operator on the accumulator.
-  /// A:=A&{adr}
-  /// Flags: NZ
-  fn and(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
-    self.cycles += cycles;
-    let address = self.get_operand_address(mode, page_boundary_cycle);
-    self.accumulator &= self.bus.read_u8(address);
-    self.update_zero_flag(self.accumulator);
-    self.update_negative_flag(self.accumulator);
-  }
-
-  /// Load the value into register A
-  /// A:={adr}
-  /// Flags: NZ
-  fn lda(&mut self, mode: Mode, cycles: u8, page_boundary_cycle: u8) {
-    self.cycles += cycles;
-    let address = self.get_operand_address(mode, page_boundary_cycle);
-    self.accumulator = self.bus.read_u8(address);
-    self.update_zero_flag(self.accumulator);
-    self.update_negative_flag(self.accumulator);
-  }
-
-  fn update_zero_flag(&mut self, value: u8) {
+  fn update_zero_and_negative_flag(&mut self, value: u8) {
     self.set_status_flag(StatusFlag::Zero, value == 0);
+    self.set_status_flag(StatusFlag::Zero, value & 0b1000_0000 == 0b1000_0000);
   }
 
-  fn update_negative_flag(&mut self, value: u8) {
-    self.set_status_flag(StatusFlag::Zero, value & 0b1000_0000 == 0b1000_0000);
+  fn update_carry_and_overflow_flag(&mut self, operand: u8, result: u16) {
+    self.set_status_flag(StatusFlag::Carry, result > 0xFF);
+    // Shorten some variables to make the math more readable.
+    let (a, o, r) = (self.accumulator, operand, result as u8);
+    let does_overflow = (a ^ o) & (a ^ r) & 0x80 != 0;
+    self.set_status_flag(StatusFlag::Overflow, does_overflow);
   }
 
   fn set_status_flag(&mut self, status_flag: StatusFlag, value: bool) {
@@ -792,6 +599,10 @@ impl Mos6502Cpu {
     } else {
       self.status_register &= !(status_flag as u8);
     }
+  }
+
+  fn get_carry(&self) -> u8 {
+    self.status_register & (StatusFlag::Carry as u8)
   }
 }
 
