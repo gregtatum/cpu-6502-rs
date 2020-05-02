@@ -29,8 +29,8 @@ pub enum StatusFlag {
   Zero             = 0b00000010,
   InterruptDisable = 0b00000100,
   Decimal          = 0b00001000,
-  NoEffect1        = 0b00010000,
-  NoEffect2        = 0b00100000,
+  Break            = 0b00010000,
+  Push             = 0b00100000,
   Overflow         = 0b01000000,
   Negative         = 0b10000000,
 }
@@ -304,7 +304,16 @@ impl Mos6502Cpu {
       //
       // For more info about signed numbers, check here:
       // http://www.emulator101.com/more-about-binary-numbers.html
-      Mode::Relative => panic!("Unhandled mode."),
+      Mode::Relative => {
+        let relative_offset = self.next_u8() as i8;
+        // Due to the nature of binary representaion of numbers, just adding the
+        // negative number will result in it being subtract. It will wrap,
+        // hence allow the wrapping operation.
+        let base_address = self.pc;
+        let offset_address = self.pc.wrapping_add(relative_offset as u16);
+        self.incur_extra_cycle_on_page_boundary(base_address, offset_address, page_boundary_cycle);
+        offset_address
+      }
       // Zero-Page is an addressing mode that is only capable of addressing the
       // first 256 bytes of the CPU's memory map. You can think of it as absolute
       // addressing for the first 256 bytes. The instruction LDA $35 will put the
@@ -629,6 +638,10 @@ impl Mos6502Cpu {
 
   fn get_carry(&self) -> u8 {
     self.p & (StatusFlag::Carry as u8)
+  }
+
+  fn is_status_flag_set(&self, status_flag: StatusFlag) -> bool {
+    self.p & (status_flag as u8) == status_flag as u8
   }
 
   /// This function implements pushing to the stack.
