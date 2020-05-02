@@ -4,7 +4,8 @@ use crate::mos_6502_emulator::*;
 /// Function: A:=A or {adr}
 /// Flags: N Z
 pub fn ora(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  cpu.accumulator |= cpu.get_operand(mode, extra_cycle).1;
+  let (_, operand) = cpu.get_operand(mode, extra_cycle);
+  cpu.accumulator |= operand;
   cpu.update_zero_and_negative_flag(cpu.accumulator);
 }
 
@@ -12,7 +13,8 @@ pub fn ora(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 /// Function: A:=A&{adr}
 /// Flags: N Z
 pub fn and(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  cpu.accumulator &= cpu.get_operand(mode, extra_cycle).1;
+  let (_, operand) = cpu.get_operand(mode, extra_cycle);
+  cpu.accumulator &= operand;
   cpu.update_zero_and_negative_flag(cpu.accumulator);
 }
 
@@ -20,7 +22,8 @@ pub fn and(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 /// Function: A:=A exor {adr}
 /// Flags: N Z
 pub fn eor(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  cpu.accumulator ^= cpu.get_operand(mode, extra_cycle).1;
+  let (_, operand) = cpu.get_operand(mode, extra_cycle);
+  cpu.accumulator ^= operand;
   cpu.update_zero_and_negative_flag(cpu.accumulator);
 }
 
@@ -29,6 +32,8 @@ pub fn eor(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 /// Flags: N V Z C
 pub fn adc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   let (_, operand) = cpu.get_operand(mode, extra_cycle);
+  // Translating to u16 means that the values won't wrap, so wrapping
+  // add is not needed.
   let result = cpu.get_carry() as u16 + cpu.accumulator as u16 + operand as u16;
   cpu.update_zero_and_negative_flag(cpu.accumulator);
   cpu.update_carry_and_overflow_flag(operand, result);
@@ -55,6 +60,7 @@ pub fn cmp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.set_status_flag(StatusFlag::Carry, cpu.accumulator >= operand);
 }
 
+/// Compare X with source
 /// Function: X-{adr}
 /// Flags: N Z C
 pub fn cpx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
@@ -63,6 +69,7 @@ pub fn cpx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.set_status_flag(StatusFlag::Carry, cpu.x_index >= operand);
 }
 
+/// Compare Y with source
 /// Function: Y-{adr}
 /// Flags: N Z C
 pub fn cpy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
@@ -71,6 +78,7 @@ pub fn cpy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.set_status_flag(StatusFlag::Carry, cpu.y_index >= operand);
 }
 
+/// Decrement at an address
 /// Function: {adr}:={adr}-1
 /// Flags: N Z
 pub fn dec(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
@@ -80,6 +88,7 @@ pub fn dec(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.bus.set_u8(address, result);
 }
 
+/// Decrement X
 /// Function: X:=X-1
 /// Flags: N Z
 pub fn dex(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
@@ -87,6 +96,7 @@ pub fn dex(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(cpu.x_index);
 }
 
+/// Decrement Y
 /// Function: Y:=Y-1
 /// Flags: N Z
 pub fn dey(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {

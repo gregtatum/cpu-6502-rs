@@ -12,3 +12,9 @@ Assembly Language:
 Other guides:
   http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=Category:Guides
   http://www.emulator101.com/
+
+6520 Spec:
+  http://www.oxyron.de/html/opcodes02.html
+
+NES Wiki:
+  https://wiki.nesdev.com/w/index.php/Status_flags
