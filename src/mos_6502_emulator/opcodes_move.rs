@@ -9,36 +9,38 @@ pub fn lda(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(cpu.accumulator);
 }
 
+/// Store register A at address
 /// Function: {adr}:=A
 /// Flags:
 pub fn sta(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.accumulator);
+  let (address, _) = cpu.get_operand(mode, extra_cycle);
+  cpu.bus.set_u8(address, cpu.accumulator);
 }
 
+/// Load register X with the value
 /// Function: X:={adr}
 /// Flags: N Z
 pub fn ldx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.accumulator);
+  cpu.x_index = operand;
+  cpu.update_zero_and_negative_flag(cpu.x_index);
 }
 
+/// Store register X at address
 /// Function: {adr}:=X
 /// Flags:
 pub fn stx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.accumulator);
+  let (address, _) = cpu.get_operand(mode, extra_cycle);
+  cpu.bus.set_u8(address, cpu.x_index);
 }
 
+/// Load register Y with the value
 /// Function: Y:={adr}
 /// Flags: N Z
 pub fn ldy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.accumulator);
+  cpu.y_index = operand;
+  cpu.update_zero_and_negative_flag(cpu.y_index);
 }
 
 /// Function: {adr}:=Y
