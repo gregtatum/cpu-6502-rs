@@ -10,24 +10,29 @@ use opcodes_jump::*;
 use opcodes_logical::*;
 use opcodes_move::*;
 
-const CLOCK_SPEED: f64 = 1.789773; // Mhz
-const CLOCK_DIVISOR: u32 = 12; //Mhz
-                               // Emulator authors may wish to emulate the NTSC NES/Famicom CPU at 21441960 Hz
-                               // ((341×262-0.5)×4×60) to ensure a synchronised/stable 60 frames per second.
-const MASTER_CLOCK_FREQUENCY: f64 = 21.441960; //Mhz
-                                               // This is the true frequency:
-                                               // const MASTER_CLOCK_FREQUENCY: f64 = 21.477272; //Mhz
-const COLOR_SUBCARRIER_FREQUENCY: f64 = 3.57954545; // Mhz
+// Mhz
+const CLOCK_SPEED: f64 = 1.789773;
+// Mhz
+const CLOCK_DIVISOR: u32 = 12;
+// Emulator authors may wish to emulate the NTSC NES/Famicom CPU at 21441960 Hz
+// ((341×262-0.5)×4×60) to ensure a synchronised/stable 60 frames per second.
+// Mhz
+const MASTER_CLOCK_FREQUENCY: f64 = 21.441960;
+// This is the true frequency:
+// const MASTER_CLOCK_FREQUENCY: f64 = 21.477272;
+// Mhz
+const COLOR_SUBCARRIER_FREQUENCY: f64 = 3.57954545;
 
+#[rustfmt::skip]
 pub enum StatusFlag {
-  Carry = 0b00000001,
-  Zero = 0b00000010,
+  Carry            = 0b00000001,
+  Zero             = 0b00000010,
   InterruptDisable = 0b00000100,
-  Decimal = 0b00001000,
-  NoEffect1 = 0b00010000,
-  NoEffect2 = 0b00100000,
-  Overflow = 0b01000000,
-  Negative = 0b10000000,
+  Decimal          = 0b00001000,
+  NoEffect1        = 0b00010000,
+  NoEffect2        = 0b00100000,
+  Overflow         = 0b01000000,
+  Negative         = 0b10000000,
 }
 
 pub enum Mode {
