@@ -28,7 +28,7 @@ function extractOpCodes(table) {
 fn ${opcode}(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
     // TODO
     let address = cpu.get_operand_address(mode, extra_cycle);
-    cpu.update_zero_and_negative_flag(cpu.accumulator);
+    cpu.update_zero_and_negative_flag(cpu.a);
 }
 `
   }

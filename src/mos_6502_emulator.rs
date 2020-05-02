@@ -55,42 +55,48 @@ pub enum ExtraCycle {
 pub struct Mos6502Cpu {
   // The bus is what
   bus: Bus,
-  // "A" Supports using the status register for carrying, overflow detection, and so on
-  accumulator: u8,
-  // Used for several addressing modes  They can be used as loop counters easily, using
-  // INC/DEC and branch instructions. Not being the accumulator, they have limited
-  // addressing modes themselves when loading and saving.
-  // "X"
-  x_index: u8,
-  y_index: u8,
+  // "A" register - The accumulator. Typical results of operations are stored here.
+  // In combination with the status register, supports using the status register for
+  // carrying, overflow detection, and so on.
+  a: u8,
+  /// "X" register.
+  /// Used for several addressing modes  They can be used as loop counters easily, using
+  /// INC/DEC and branch instructions. Not being the accumulator, they have limited
+  /// addressing modes themselves when loading and saving.
+  x: u8,
+  /// "Y" register.
+  y: u8,
 
-  // The 2-byte program counter PC supports 65536 direct (unbanked) memory locations,
-  // however not all values are sent to the cartridge. It can be accessed either by
-  // allowing CPU's internal fetch logic increment the address bus, an interrupt
-  // (NMI, Reset, IRQ/BRQ), and using the RTS/JMP/JSR/Branch instructions.
-  // "PC"
-  program_counter: u16,
+  /// "PC" - Program counter.
+  /// The 2-byte program counter PC supports 65536 direct (unbanked) memory locations,
+  /// however not all values are sent to the cartridge. It can be accessed either by
+  /// allowing CPU's internal fetch logic increment the address bus, an interrupt
+  /// (NMI, Reset, IRQ/BRQ), and using the RTS/JMP/JSR/Branch instructions.
+  /// "PC"
+  pc: u16,
 
-  // S is byte-wide and can be accessed using interrupts, pulls, pushes, and transfers.
-  stack_pointer: u8,
+  /// "S" - Stack pointer
+  /// is byte-wide and can be accessed using interrupts, pulls, pushes, and transfers.
+  s: u8,
 
-  // P has 6 bits used by the ALU but is byte-wide. PHP, PLP, arithmetic, testing,
-  // and branch instructions can access this register.
-  //
-  // http://wiki.nesdev.com/w/index.php/Status_flags
-  //
-  //   7  bit  0
-  // ---- ----
-  // NVss DIZC
-  // |||| ||||
-  // |||| |||+- Carry
-  // |||| ||+-- Zero
-  // |||| |+--- Interrupt Disable
-  // |||| +---- Decimal
-  // ||++------ No CPU effect, see: the B flag
-  // |+-------- Overflow
-  // +--------- Negative
-  status_register: u8,
+  /// "P" - Status register.
+  /// P has 6 bits used by the ALU but is byte-wide. PHP, PLP, arithmetic, testing,
+  /// and branch instructions can access this register.
+  ///
+  /// http://wiki.nesdev.com/w/index.php/Status_flags
+  ///
+  ///   7  bit  0
+  /// ---- ----
+  /// NVss DIZC
+  /// |||| ||||
+  /// |||| |||+- Carry
+  /// |||| ||+-- Zero
+  /// |||| |+--- Interrupt Disable
+  /// |||| +---- Decimal
+  /// ||++------ No CPU effect, see: the B flag
+  /// |+-------- Overflow
+  /// +--------- Negative
+  p: u8,
 
   /// The number of cycles that were done while operating on an instruction. The
   /// emulator will then need to wait the proper amount of time after executing
@@ -176,29 +182,38 @@ impl Mos6502Cpu {
   fn new(bus: Bus) -> Mos6502Cpu {
     // Go ahead and read the first instruction from the reset vector. If the reset
     // vector is set again, the program will end.
-    let program_counter = bus.read_u16(InterruptVectors::ResetVector as u16);
+    let pc = bus.read_u16(InterruptVectors::ResetVector as u16);
 
     Mos6502Cpu {
       bus,
-      accumulator: 0,
-      x_index: 0,
-      y_index: 0,
-      program_counter,
-      stack_pointer: 0xFD,
-      status_register: 0x34,
+      // Accumulator
+      a: 0,
+      // X & Y Registers.
+      x: 0,
+      y: 0,
+      // The program counter.
+      pc,
+      // Stack pointer
+      s: 0xFD,
+      // Status register
+      p: 0x34,
       cycles: 0,
     }
   }
 
+  /// Increment the program counter and read the next u8 value following
+  /// the current pc.
   fn next_u8(&mut self) -> u8 {
-    let value = self.bus.read_u8(self.program_counter);
-    self.program_counter += 1;
+    let value = self.bus.read_u8(self.pc);
+    self.pc += 1;
     value
   }
 
+  /// Increment the program counter and read the next u16 value following
+  /// the current pc.
   fn next_u16(&mut self) -> u16 {
-    let value = self.bus.read_u16(self.program_counter);
-    self.program_counter += 2;
+    let value = self.bus.read_u16(self.pc);
+    self.pc += 2;
     value
   }
 
@@ -238,13 +253,13 @@ impl Mos6502Cpu {
       //    BPL loop    ; Loop until Y is 0
       Mode::AbsoluteIndexedX => {
         let base_address = self.next_u16();
-        let offset_address = base_address + self.x_index as u16;
+        let offset_address = base_address + self.x as u16;
         self.incur_extra_cycle_on_page_boundary(base_address, offset_address, page_boundary_cycle);
         return offset_address;
       }
       Mode::AbsoluteIndexedY => {
         let base_address = self.next_u16();
-        let offset_address = base_address + self.y_index as u16;
+        let offset_address = base_address + self.y as u16;
         self.incur_extra_cycle_on_page_boundary(base_address, offset_address, page_boundary_cycle);
         return offset_address;
       }
@@ -256,8 +271,8 @@ impl Mos6502Cpu {
       Mode::Immediate => {
         // Return the current program counter as the address, but also increment
         // the program counter.
-        let address = self.program_counter;
-        self.program_counter += 1;
+        let address = self.pc;
+        self.pc += 1;
         return address;
       }
       // In an implied instruction, the data and/or destination is mandatory for
@@ -293,8 +308,8 @@ impl Mos6502Cpu {
       // be in the zero page. If the instruction is LDA $C0,X, and X is $60, then
       // the target address will be $20. $C0+$60 = $120, but the carry is discarded
       // in the calculation of the target address.
-      Mode::ZeroPageX => (self.next_u8() + self.x_index) as u16,
-      Mode::ZeroPageY => (self.next_u8() + self.y_index) as u16,
+      Mode::ZeroPageX => (self.next_u8() + self.x) as u16,
+      Mode::ZeroPageY => (self.next_u8() + self.y) as u16,
       Mode::None => panic!("Mode::None is attempting to be used."),
     }
   }
@@ -588,21 +603,21 @@ impl Mos6502Cpu {
   fn update_carry_and_overflow_flag(&mut self, operand: u8, result: u16) {
     self.set_status_flag(StatusFlag::Carry, result > 0xFF);
     // Shorten some variables to make the math more readable.
-    let (a, o, r) = (self.accumulator, operand, result as u8);
+    let (a, o, r) = (self.a, operand, result as u8);
     let does_overflow = (a ^ o) & (a ^ r) & 0x80 != 0;
     self.set_status_flag(StatusFlag::Overflow, does_overflow);
   }
 
   fn set_status_flag(&mut self, status_flag: StatusFlag, value: bool) {
     if value {
-      self.status_register |= status_flag as u8;
+      self.p |= status_flag as u8;
     } else {
-      self.status_register &= !(status_flag as u8);
+      self.p &= !(status_flag as u8);
     }
   }
 
   fn get_carry(&self) -> u8 {
-    self.status_register & (StatusFlag::Carry as u8)
+    self.p & (StatusFlag::Carry as u8)
   }
 }
 
@@ -634,10 +649,10 @@ mod test {
         OpCode::LDA_imm as u8, // Load a value into the A register.
         0x66,                  // Here is the value, which is 1 byte.
       ],
-      |cpu| cpu.accumulator == 0x66,
+      |cpu| cpu.a == 0x66,
     );
 
-    assert_eq!(cpu.accumulator, 0x66, "cpu.accumulator");
+    assert_eq!(cpu.a, 0x66, "cpu.a");
     assert_eq!(cpu.cycles, 2, "cpu.cycles");
   }
 
@@ -656,10 +671,10 @@ mod test {
         OpCode::ORA_imm as u8, // The | operator
         b,                     // Now the operand for the operation
       ],
-      |cpu| cpu.accumulator == result,
+      |cpu| cpu.a == result,
     );
 
-    assert_eq!(cpu.accumulator, result, "cpu.accumulator");
+    assert_eq!(cpu.a, result, "cpu.a");
     assert_eq!(cpu.cycles, 4, "cpu.cycles");
   }
 
@@ -678,10 +693,10 @@ mod test {
         OpCode::AND_imm as u8, // The & operator
         b,                     // Now the operand for the operation
       ],
-      |cpu| cpu.accumulator == result,
+      |cpu| cpu.a == result,
     );
 
-    assert_eq!(cpu.accumulator, result, "cpu.accumulator");
+    assert_eq!(cpu.a, result, "cpu.a");
     assert_eq!(cpu.cycles, 4, "cpu.cycles");
   }
 }
