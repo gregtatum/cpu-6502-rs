@@ -36,7 +36,8 @@ pub fn adc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // add is not needed.
   let result = cpu.get_carry() as u16 + cpu.a as u16 + operand as u16;
   cpu.update_zero_and_negative_flag(cpu.a);
-  cpu.update_carry_and_overflow_flag(operand, result);
+  cpu.update_carry_flag(result);
+  cpu.update_overflow_flag(operand, result);
   cpu.a = result as u8;
 }
 
@@ -47,7 +48,8 @@ pub fn sbc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   let operand = !cpu.get_operand(mode, extra_cycle).1;
   let result = cpu.get_carry() as u16 + cpu.a as u16 + operand as u16;
   cpu.update_zero_and_negative_flag(cpu.a);
-  cpu.update_carry_and_overflow_flag(operand, result);
+  cpu.update_carry_flag(result);
+  cpu.update_overflow_flag(operand, result);
   cpu.a = result as u8;
 }
 

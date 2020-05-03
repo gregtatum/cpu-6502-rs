@@ -35,6 +35,7 @@ pub enum StatusFlag {
   Negative         = 0b10000000,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
   Absolute,         // abs
   AbsoluteIndexedX, // abx
@@ -620,8 +621,11 @@ impl Mos6502Cpu {
     self.set_status_flag(StatusFlag::Zero, value & 0b1000_0000 == 0b1000_0000);
   }
 
-  fn update_carry_and_overflow_flag(&mut self, operand: u8, result: u16) {
+  fn update_carry_flag(&mut self, result: u16) {
     self.set_status_flag(StatusFlag::Carry, result > 0xFF);
+  }
+
+  fn update_overflow_flag(&mut self, operand: u8, result: u16) {
     // Shorten some variables to make the math more readable.
     let (a, o, r) = (self.a, operand, result as u8);
     let does_overflow = (a ^ o) & (a ^ r) & 0x80 != 0;
@@ -641,7 +645,8 @@ impl Mos6502Cpu {
   }
 
   fn is_status_flag_set(&self, status_flag: StatusFlag) -> bool {
-    self.p & (status_flag as u8) == status_flag as u8
+    let flag = status_flag as u8;
+    self.p & (flag as u8) == flag as u8
   }
 
   /// This function implements pushing to the stack.

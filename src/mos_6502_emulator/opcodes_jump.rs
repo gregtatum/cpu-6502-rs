@@ -111,7 +111,7 @@ pub fn beq(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 ///         It also sets the status flags so we know what state the CPU is in.
 /// Function: (S)-:=PC,P PC:=($FFFE)
 /// Flags: B I
-pub fn brk(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
+pub fn brk(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
   cpu.push_stack_u16(cpu.pc);
   cpu.push_stack_u8(cpu.p);
   cpu.pc = InterruptVectors::ResetVector as u16;
@@ -132,14 +132,14 @@ pub fn rti(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
 /// Flags:
 pub fn jsr(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.push_stack_u16(cpu.pc);
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
+  let (address, _operand) = cpu.get_operand(mode, extra_cycle);
   cpu.pc = address;
 }
 
 /// Return from Sub Routine
 /// Function: PC:=+(S)
 /// Flags:
-pub fn rts(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
+pub fn rts(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
   cpu.pc = cpu.pull_stack_u16();
 }
 
@@ -147,78 +147,73 @@ pub fn rts(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 /// Function: PC:={adr}
 /// Flags:
 pub fn jmp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
+  let (address, _operand) = cpu.get_operand(mode, extra_cycle);
   cpu.pc = address;
 }
 
+/// Bit test
 /// Function: N:=b7 V:=b6 Z:=A&{adr}
 /// Flags: N V Z
 pub fn bit(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+  let (_, operand) = cpu.get_operand(mode, extra_cycle);
+  let result = cpu.a & operand;
+  cpu.set_status_flag(StatusFlag::Negative, operand & 0b10000000 != 0);
+  cpu.set_status_flag(StatusFlag::Overflow, operand & 0b01000000 != 0);
+  cpu.set_status_flag(StatusFlag::Zero, result == 0);
 }
 
+/// Clear Carry flag
 /// Function: C:=0
 /// Flags: C
-pub fn clc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn clc(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::Zero, false);
 }
 
+/// Set Carry flag
 /// Function: C:=1
 /// Flags: C
-pub fn sec(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn sec(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::Zero, true);
 }
 
+/// Clear Decimal flag
 /// Function: D:=0
 /// Flags: D
-pub fn cld(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn cld(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::Zero, false);
 }
 
+/// Set Decimal flag
 /// Function: D:=1
 /// Flags: D
-pub fn sed(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn sed(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::Zero, true);
 }
 
+/// Clear Interrupt disable
 /// Function: I:=0
 /// Flags: I
-pub fn cli(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn cli(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::InterruptDisable, false);
 }
 
+/// Set Interrupt disable
 /// Function: I:=1
 /// Flags: I
-pub fn sei(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn sei(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::InterruptDisable, true);
 }
 
+/// Clear overflow flag
 /// Function: V:=0
 /// Flags: V
-pub fn clv(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn clv(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  cpu.set_status_flag(StatusFlag::Overflow, false);
 }
 
+/// No operation
 /// Function:
 /// Flags:
-pub fn nop(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
-  let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+pub fn nop(_cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
+  // Do nothing, wheee!
 }

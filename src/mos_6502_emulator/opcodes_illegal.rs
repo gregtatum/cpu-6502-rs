@@ -3,9 +3,13 @@ use crate::mos_6502_emulator::*;
 /// Function: {adr}:={adr}*2 A:=A or {adr}
 /// Flags: N Z C
 pub fn slo(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.update_zero_and_negative_flag(cpu.a);
+  let result_u16 = operand as u16 * 2;
+  let result_u8 = result_u16 as u8;
+  cpu.bus.set_u8(address, result_u8);
+  cpu.a = cpu.a | result_u8;
+  cpu.update_zero_and_negative_flag(result_u8);
+  cpu.update_carry_flag(result_u16);
 }
 
 /// Function: {adr}:={adr}rol A:=A and {adr}
