@@ -1,5 +1,6 @@
 use crate::bus::Bus;
 use crate::constants::{memory_range, InterruptVectors};
+use crate::opcodes::Mode;
 mod opcodes_illegal;
 mod opcodes_jump;
 mod opcodes_logical;
@@ -33,23 +34,6 @@ pub enum StatusFlag {
   Push             = 0b00100000,
   Overflow         = 0b01000000,
   Negative         = 0b10000000,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Mode {
-  Absolute,         // abs
-  AbsoluteIndexedX, // abx
-  AbsoluteIndexedY, // aby
-  Immediate,        // imm
-  Implied,          // imp
-  Indirect,         // ind
-  IndirectX,        // izx
-  IndirectY,        // izy
-  Relative,         // rel
-  ZeroPage,         // zp
-  ZeroPageX,        // zpx
-  ZeroPageY,        // zpy
-  None,             // non - This last one is fake.
 }
 
 pub enum ExtraCycle {

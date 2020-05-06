@@ -14,6 +14,7 @@ pub fn slo(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:={adr}rol A:=A and {adr}
 /// Flags: N Z C
+#[allow(unused)]
 pub fn rla(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -22,6 +23,7 @@ pub fn rla(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:={adr}/2 A:=A exor {adr}
 /// Flags: N Z C
+#[allow(unused)]
 pub fn sre(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -30,6 +32,7 @@ pub fn sre(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:={adr}ror A:=A adc {adr}
 /// Flags: N V Z C
+#[allow(unused)]
 pub fn rra(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -38,6 +41,7 @@ pub fn rra(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:=A&X
 /// Flags:
+#[allow(unused)]
 pub fn sax(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -46,6 +50,7 @@ pub fn sax(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A,X:={adr}
 /// Flags: N Z
+#[allow(unused)]
 pub fn lax(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -54,6 +59,7 @@ pub fn lax(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:={adr}-1 A-{adr}
 /// Flags: N Z C
+#[allow(unused)]
 pub fn dcp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -62,6 +68,7 @@ pub fn dcp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:={adr}+1 A:=A-{adr}
 /// Flags: N V Z C
+#[allow(unused)]
 pub fn isc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -70,6 +77,7 @@ pub fn isc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A:=A&#{imm}
 /// Flags: N Z C
+#[allow(unused)]
 pub fn anc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -78,6 +86,7 @@ pub fn anc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A:=(A&#{imm})/2
 /// Flags: N Z C
+#[allow(unused)]
 pub fn alr(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -86,6 +95,7 @@ pub fn alr(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A:=(A&#{imm})/2
 /// Flags: N V Z C
+#[allow(unused)]
 pub fn arr(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -94,6 +104,7 @@ pub fn arr(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A:=X&#{imm}
 /// Flags: N Z
+#[allow(unused)]
 pub fn xaa(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -102,6 +113,7 @@ pub fn xaa(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: X:=A&X-#{imm}
 /// Flags: N Z C
+#[allow(unused)]
 pub fn axs(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -110,6 +122,7 @@ pub fn axs(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:=A&X&H
 /// Flags:
+#[allow(unused)]
 pub fn ahx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -118,6 +131,7 @@ pub fn ahx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:=Y&H
 /// Flags:
+#[allow(unused)]
 pub fn shy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -126,6 +140,7 @@ pub fn shy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: {adr}:=X&H
 /// Flags:
+#[allow(unused)]
 pub fn shx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -134,6 +149,7 @@ pub fn shx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: S:=A&X {adr}:=S&H
 /// Flags:
+#[allow(unused)]
 pub fn tas(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -142,6 +158,7 @@ pub fn tas(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: A,X,S:={adr}&S
 /// Flags: N Z
+#[allow(unused)]
 pub fn las(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
@@ -150,6 +167,7 @@ pub fn las(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 
 /// Function: halts the CPU. the data bus will be set to #$FF
 /// Flags: N Z
+#[allow(unused)]
 pub fn kil(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   // TODO
   let (address, operand) = cpu.get_operand(mode, extra_cycle);

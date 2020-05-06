@@ -1,19 +1,19 @@
-use super::opcodes::OpCode;
+use crate::opcodes::{instruction_mode_to_op_code, match_instruction, Instruction, TokenMode};
+use colored::*;
+use std::str::Chars;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    Op(OpCode),
-    Return,
-    If,
-    Else,
-    Identifier(StringIndex),
-    Number(f64),
-    Char(char),
+    Instruction(Instruction),
+    Mode(TokenMode),
+    U8(u8),
+    U16(u16),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Character {
     Whitespace,
+    Newline,
     Alpha,
     Numeric,
     NewLine,
@@ -47,127 +47,522 @@ macro_rules! iter_peek_match {
     }
 }
 
+type TokenizerResult = Result<(), String>;
 
-pub type StringIndex = usize;
-
-pub struct StringTable {
-    strings: Vec<String>
+#[derive(Debug)]
+struct ParseError {
+    message: String,
+    nice_message: String,
+    column: u64,
+    row: u64,
 }
 
-impl StringTable {
-    pub fn new() -> StringTable {
-        StringTable {
-            strings: Vec::new()
-        }
-    }
+impl ParseError {
+    fn new(message: String, parser: &AsmParser) -> ParseError {
+        let error_row_index = parser.row as usize - 1;
+        let range = 3;
+        let min = (error_row_index as i64 - range).max(0) as usize;
+        let max = (error_row_index as i64 + range) as usize;
 
-    pub fn take_string(&mut self, string: String) -> StringIndex {
-        match self.strings.iter().position(|s| *s == string) {
-            Some(index) => index,
-            None => {
-                let index = self.strings.len();
-                self.strings.push(string);
-                index
+        let mut nice_message = String::from("\n\n");
+        for (row_index, row_text) in parser.text.lines().enumerate() {
+            if row_index > max {
+                break;
+            }
+            if row_index < min {
+                continue;
+            }
+
+            // Lazypad.
+            let col_string = if row_index < 9 {
+                format!("   {}: ", row_index + 1)
+            } else if row_index < 99 {
+                format!("  {}: ", row_index + 1)
+            } else if row_index < 999 {
+                format!(" {}: ", row_index + 1)
+            } else {
+                format!("{}: ", row_index + 1)
+            };
+            nice_message.push_str(&format!("{}", &col_string.cyan()));
+
+            nice_message.push_str(&format!("{}", &row_text.bright_white()));
+            nice_message.push_str("\n");
+
+            if row_index == error_row_index {
+                let indent = " ".repeat((parser.column + 5) as usize);
+                let error_message = &format!(
+                    "^ parse error on row {} column {} ",
+                    parser.row, parser.column
+                );
+                nice_message.push_str(&indent);
+                nice_message.push_str(&format!("{}", error_message.bright_red()));
+                nice_message.push_str("\n");
+                nice_message.push_str(&indent);
+                nice_message.push_str(&format!("{}", message.bright_red()));
+                nice_message.push_str("\n");
             }
         }
-    }
 
-    pub fn index(&mut self, string: &String) -> StringIndex {
-        match self.strings.iter().position(|s| s == string) {
-            Some(index) => index,
-            None => {
-                let index = self.strings.len();
-                self.strings.push(string.to_string());
-                index
-            }
+        nice_message.push('\n');
+
+        ParseError {
+            message,
+            nice_message,
+            column: parser.column,
+            row: parser.row,
         }
     }
 
-    pub fn string(&self, index: StringIndex) -> Option<&String> {
-        self.strings.get(index)
+    fn panic_nicely(self) {
+        panic!(self.nice_message);
     }
 }
 
-pub struct AsmToTokens<'a> {
-    characters: std::iter::Peekable<
-        std::str::Chars<'a>
-    >,
+pub struct AsmParser<'a> {
+    text: &'a str,
+    lines: std::str::Lines<'a>,
+    characters: std::iter::Peekable<Chars<'a>>,
     tokens: Vec<Token>,
-    string_table: StringTable,
+    row: u64,
+    column: u64,
 }
 
-impl<'a> AsmToTokens<'a> {
-    fn new (text: &'a str) -> AsmToTokens {
-        AsmToTokens {
-            characters: IntoIterator::into_iter(text.chars()).peekable(),
-            binary: Vec::new(),
-            string_table: StringTable::new()
+impl<'a> AsmParser<'a> {
+    fn new(text: &'a str) -> AsmParser {
+        AsmParser {
+            text,
+            characters: IntoIterator::into_iter("".chars()).peekable(),
+            lines: IntoIterator::into_iter(text.lines()),
+            tokens: Vec::new(),
+            column: 1,
+            row: 1,
         }
     }
 
-    fn parse(&mut self) {
-
+    fn next_character(&mut self) -> Option<char> {
+        let character = self.characters.next();
+        if character.is_some() {
+            self.column += 1;
+        }
+        character
     }
 
-    fn parse_instruction(&mut self) {
-        let op_ident: Vec<char> = Vec::with_capacity(3);
-        let mode_ident: Vec<char> = Vec::with_capacity(3);
+    fn panic(&self, reason: &str) -> TokenizerResult {
+        Err(format!("{} Location: {}:{}", reason, self.row, self.column))
+    }
 
+    fn parse(&mut self) -> Result<(), ParseError> {
         loop {
-            match self.characters.next() {
-                Some(character) => {
-                    match char_to_enum(&character) {
-                        Character::Whitespace => continue,
-                        Character::Value('\n') => {},
-                        Character::Value(';') => self.skip_to_end_of_line_if_comment(),
-                        Character::Numeric => tokens.push(
-                            Token::Number(get_number(&mut characters, character))
-                        ),
-                        Character::Alpha => tokens.push({
-                            let word = get_word(&mut characters, &character);
-                            if word == "function" {
-                                Token::Function
-                            } else if word == "if" {
-                                Token::If
-                            } else if word == "else" {
-                                Token::Else
-                            } else if word == "return" {
-                                Token::Return
-                            } else {
-                                Token::Identifier(string_table.take_string(word))
+            match self.lines.next() {
+                Some(line) => {
+                    self.characters = IntoIterator::into_iter(line.chars()).peekable();
+                    match self.parse_root_level() {
+                        Err(message) => return Err(ParseError::new(message, self)),
+                        _ => {}
+                    }
+                }
+                None => {
+                    return Ok(());
+                }
+            };
+            self.row += 1;
+            self.column = 0;
+        }
+    }
+
+    fn parse_root_level(&mut self) -> Result<(), String> {
+        loop {
+            match self.next_character() {
+                Some(character) => match char_to_enum(&character) {
+                    Character::Whitespace => {}
+                    Character::Value(';') => {
+                        return self.ignore_comment_contents();
+                    }
+                    Character::Alpha => {
+                        let word = self.get_word(Some(&character));
+                        match match_instruction(&word) {
+                            Some(instruction) => {
+                                self.tokens.push(Token::Instruction(instruction.clone()));
+                                self.parse_operand(instruction)?;
+                            },
+                            None => return Err(
+                                format!("Found the word \"{}\", and not an instruction. Labels are not supported as of yet.", word)
+                            ),
+                        }
+                    }
+                    _ => return Err(format!("Unknown next token. {}", character)),
+                },
+                None => return Ok(()),
+            }
+        }
+    }
+
+    fn to_tokens(self) -> Vec<Token> {
+        self.tokens
+    }
+
+    fn to_bytes(self) -> Result<Vec<u8>, String> {
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut tokens = self.tokens.iter().peekable();
+        loop {
+            match tokens.next() {
+                Some(token) => match token {
+                    Token::Instruction(instruction) => match tokens.peek() {
+                        Some(Token::Mode(mode)) => {
+                            bytes.push(instruction_mode_to_op_code(instruction, mode)? as u8);
+                            tokens.next();
+
+                            match mode {
+                                TokenMode::Absolute
+                                | TokenMode::AbsoluteIndexedX
+                                | TokenMode::AbsoluteIndexedY => {
+                                    match tokens.next() {
+                                        Some(Token::U16(value)) => {
+                                            let [a, b] = value.to_le_bytes();
+                                            bytes.push(a);
+                                            bytes.push(b);
+                                        },
+                                        Some(token) => return Err(
+                                            format!("Expected a u16 to be the operand of an operation, but found a: {:?}", token)
+                                        ),
+                                        None => return Err(
+                                            "Expected a u16 to be the operand of an operation, but found nothing".to_string()
+                                        )
+                                    };
+                                }
+                                TokenMode::ZeroPageOrRelative
+                                | TokenMode::ZeroPageX
+                                | TokenMode::ZeroPageY
+                                | TokenMode::Immediate => {
+                                    match tokens.next() {
+                                        Some(Token::U8(value)) => bytes.push(*value),
+                                        Some(token) => return Err(format!("Expected a u8 to be the operand of an operation, but found a: {:?}", token)),
+                                        None => return Err("Expected a u8 to be the operand of an operation, but found nothing".to_string())
+                                    };
+                                }
+                                TokenMode::Implied | TokenMode::None => {}
+                                TokenMode::Indirect
+                                | TokenMode::IndirectX
+                                | TokenMode::IndirectY => return Err("Unhandled mode.".to_string()),
                             }
-                        }),
-                        Character::Value(value) => tokens.push(Token::Char(value))
+                        }
+                        _ => {
+                            bytes
+                                .push(instruction_mode_to_op_code(instruction, &TokenMode::None)?
+                                    as u8);
+                        }
+                    },
+                    token => {
+                        return Err(format!(
+                            "Unexpected token. Expected an instrunction {:?}",
+                            token
+                        ))
                     }
                 },
                 None => break,
             }
         }
+        Ok(bytes)
     }
 
-    fn skip_to_end_of_line_if_comment(&mut self) {
+    fn next_characters_u8(&mut self) -> Result<u8, String> {
+        let dollar = self.next_character_or_err()?;
+        self.verify_character(dollar, '$')?;
+
+        let mut string = String::new();
+        string.push(self.next_character_or_err()?);
+        string.push(self.next_character_or_err()?);
+        match u8::from_str_radix(&string, 16) {
+            Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
+            Ok(value) => Ok(value),
+        }
+    }
+
+    fn next_characters_u16(&mut self) -> Result<u16, String> {
+        let dollar = self.next_character_or_err()?;
+        self.verify_character(dollar, '$')?;
+
+        let mut string = String::new();
+        string.push(self.next_character_or_err()?);
+        string.push(self.next_character_or_err()?);
+        string.push(self.next_character_or_err()?);
+        string.push(self.next_character_or_err()?);
+        match u16::from_str_radix(&string, 16) {
+            Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
+            Ok(value) => Ok(value),
+        }
+    }
+
+    fn next_characters_u8_or_u16(&mut self) -> Result<(Option<u8>, Option<u16>), String> {
+        let word = self.get_word(None);
+        match word.len() {
+            2 => match u8::from_str_radix(&word, 16) {
+                Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
+                Ok(value) => Ok((Some(value), None)),
+            },
+            4 => match u16::from_str_radix(&word, 16) {
+                Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
+                Ok(value) => Ok((None, Some(value))),
+            },
+            _ => Err("Unable to extract a number.".to_string()),
+        }
+    }
+
+    fn next_character_or_err(&mut self) -> Result<char, String> {
+        match self.next_character() {
+            Some(character) => Ok(character),
+            None => Err("Unexpected end of file.".to_string()),
+        }
+    }
+
+    fn peek_is_next_character(&mut self, value: char) -> bool {
+        match self.characters.peek() {
+            Some(character) => *character == value,
+            None => false,
+        }
+    }
+
+    fn verify_character(&self, a: char, b: char) -> TokenizerResult {
+        if a != b {
+            return Err(format!("Expected character \"{}\" to be \"{}\"", a, b));
+        }
+        Ok(())
+    }
+
+    /// imm = #$00
+    /// zp = $00
+    /// zpx = $00,X
+    /// zpy = $00,Y
+    /// izx = ($00,X)
+    /// izy = ($00),Y
+    /// abs = $0000
+    /// abx = $0000,X
+    /// aby = $0000,Y
+    /// ind = ($0000)
+    /// rel = $0000 (PC-relative)
+    fn parse_operand(&mut self, instruction: Instruction) -> Result<(), String> {
         loop {
-            match self.characters.next() {
-                Some('\n') => break,
-                Some(_) => continue,
-                None => break,
+            match self.next_character() {
+                Some(character) => {
+                    match char_to_enum(&character) {
+                        Character::Whitespace => continue,
+                        Character::Value(';') => {
+                            return self.ignore_comment_contents();
+                        }
+                        Character::Value('#') => {
+                            // Immediate mode, match #$00.
+                            self.tokens.push(Token::Mode(TokenMode::Immediate));
+                            let value = self.next_characters_u8()?;
+                            self.tokens.push(Token::U8(value));
+                            return self.continue_to_end_of_line();
+                        }
+                        Character::Value('$') => {
+                            let value = self.next_characters_u8_or_u16()?;
+                            if value.0.is_some() {
+                                let value_u8 = value.0.unwrap();
+
+                                // Figure out the mode.
+                                if self.peek_is_next_character(',') {
+                                    // Skip the ","
+                                    self.next_character_or_err()?;
+                                    let character = self.next_character_or_err()?;
+                                    self.tokens.push(match character {
+                                        'x' => Token::Mode(TokenMode::ZeroPageX),
+                                        'y' => Token::Mode(TokenMode::ZeroPageY),
+                                        _ => {
+                                            return Err(format!(
+                                                "Unexpected index mode: {}",
+                                                character
+                                            ))
+                                        }
+                                    });
+                                } else {
+                                    self.tokens.push(Token::Mode(TokenMode::ZeroPageOrRelative));
+                                }
+
+                                self.tokens.push(Token::U8(value_u8));
+                            } else if value.1.is_some() {
+                                let value_u16 = value.1.unwrap();
+
+                                // Figure out the mode.
+                                if self.peek_is_next_character(',') {
+                                    // Skip the ","
+                                    self.next_character_or_err()?;
+                                    let character = self.next_character_or_err()?;
+                                    self.tokens.push(match character {
+                                        'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
+                                        'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
+                                        _ => {
+                                            return Err(format!(
+                                                "Unexpected index mode: {}",
+                                                character
+                                            ))
+                                        }
+                                    });
+                                } else {
+                                    self.tokens.push(Token::Mode(TokenMode::Absolute));
+                                }
+
+                                self.tokens.push(Token::U16(value_u16));
+                            } else {
+                                panic!("Expected next_characters_u8_or_u16 to return a value");
+                            }
+                            return self.continue_to_end_of_line();
+                        }
+                        value => {
+                            return Err(format!(
+                                "Unknown character type when attempting to parse an operand. {:?}",
+                                value
+                            ))
+                        }
+                    }
+                }
+                None => {
+                    return match instruction {
+                        Instruction::DEX => Ok(()),
+                        Instruction::DEY => Ok(()),
+                        Instruction::INX => Ok(()),
+                        Instruction::INY => Ok(()),
+                        Instruction::BRK => Ok(()),
+                        Instruction::RTI => Ok(()),
+                        Instruction::RTS => Ok(()),
+                        Instruction::CLC => Ok(()),
+                        Instruction::SEC => Ok(()),
+                        Instruction::CLD => Ok(()),
+                        Instruction::SED => Ok(()),
+                        Instruction::CLI => Ok(()),
+                        Instruction::SEI => Ok(()),
+                        Instruction::CLV => Ok(()),
+                        Instruction::NOP => Ok(()),
+                        Instruction::TAX => Ok(()),
+                        Instruction::TXA => Ok(()),
+                        Instruction::TAY => Ok(()),
+                        Instruction::TYA => Ok(()),
+                        Instruction::TSX => Ok(()),
+                        Instruction::TXS => Ok(()),
+                        Instruction::PLA => Ok(()),
+                        Instruction::PHA => Ok(()),
+                        Instruction::PLP => Ok(()),
+                        Instruction::PHP => Ok(()),
+                        _ => Err(format!("Instruction {:?} expected an operand", instruction)
+                            .to_string()),
+                    }
+                }
             }
         }
     }
 
-    fn get_word(&mut self, starting_char: &char) -> String {
+    fn ignore_comment_contents(&mut self) -> Result<(), String> {
+        loop {
+            // This effectively runs ".last()" without consuming the iterator.
+            match self.next_character() {
+                None => return Ok(()),
+                _ => {}
+            };
+        }
+    }
+
+    fn continue_to_end_of_line(&mut self) -> TokenizerResult {
+        loop {
+            match self.next_character() {
+                Some(character) => match char_to_enum(&character) {
+                    Character::Whitespace => continue,
+                    Character::Value(';') => return self.ignore_comment_contents(),
+                    value => return Err(format!("Unknown character encountered \"{:?}\".", value)),
+                },
+                None => {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    fn get_word(&mut self, starting_char: Option<&char>) -> String {
         let mut word = String::new();
-        word.push(*starting_char);
+        match starting_char {
+            Some(starting_char) => {
+                word.push(*starting_char);
+            }
+            None => {}
+        }
 
         iter_peek_match!(self.characters, character => {
             Character::Alpha | Character::Numeric => {
                 word.push(character);
-                self.characters.next();
+                self.next_character();
             },
             _ => break,
         });
 
         return word;
     }
+}
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::opcodes::OpCode::*;
 
+    macro_rules! assert_program {
+        ( $text:expr, [$( $bytes:expr ),*] ) => {
+            let mut parser = AsmParser::new($text);
+
+            match parser.parse() {
+                Ok(_) => {
+                    let bytes = parser.to_bytes().unwrap();
+                    // Here's the biggest reason for the macro, this will add the `as u8`
+                    // to the bytes generated.
+                    assert_eq!(bytes, vec![$( $bytes as u8, )*]);
+                }
+                Err(parse_error) => {
+                    parse_error.panic_nicely();
+                }
+            };
+        };
+    }
+
+    #[test]
+    fn test_immediate_mode() {
+        assert_program!(
+            "lda #$66    ; Load 0x66 into the A register",
+            [LDA_imm, 0x66]
+        );
+    }
+
+    #[test]
+    fn test_multiple_lines() {
+        assert_program!(
+            "
+                lda #$66    ; Load 0x66 into the A register
+                adc #$55    ; Add 0x55 to it
+            ",
+            [LDA_imm, 0x66, ADC_imm, 0x55]
+        );
+    }
+
+    #[test]
+    fn test_all_modes() {
+        assert_program!(
+            "
+                lda #$66    ; immediate
+
+                ora $1234   ; absolute
+                asl $1234,x ; absolute indexed X
+                eor $1234,y ; absolute indexed Y
+
+                bpl $03     ; relative
+                sty $04     ; zero page
+                sta $05,x   ; zero page indexed X
+                stx $06,y   ; zero page indexed Y
+
+                ; TODO
+                ; TokenMode::Indirect
+                ; TokenMode::IndirectX
+                ; TokenMode::IndirectY
+            ",
+            [
+                LDA_imm, 0x66, ORA_abs, 0x34, 0x12, ASL_abx, 0x34, 0x12, EOR_aby, 0x34, 0x12,
+                BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06
+            ]
+        );
+    }
 }

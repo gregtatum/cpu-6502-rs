@@ -1,7 +1,8 @@
 // Remove this once this is a bit more mature.
 #![allow(dead_code)]
 
-pub mod mos_6502_emulator;
+pub mod asm_to_tokens;
 pub mod bus;
-pub mod opcodes;
 pub mod constants;
+pub mod mos_6502_emulator;
+pub mod opcodes;
