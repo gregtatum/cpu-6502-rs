@@ -20,6 +20,11 @@ pub enum Character {
     Value(char),
 }
 
+pub enum U8OrU16 {
+    U8(u8),
+    U16(u16),
+}
+
 fn char_to_enum(character: &char) -> Character {
     if character.is_numeric() {
         return Character::Numeric;
@@ -179,7 +184,7 @@ impl<'a> AsmParser<'a> {
                         return self.ignore_comment_contents();
                     }
                     Character::Alpha => {
-                        let word = self.get_word(Some(&character));
+                        let word = self.get_word(Some(&character))?;
                         match match_instruction(&word) {
                             Some(instruction) => {
                                 self.tokens.push(Token::Instruction(instruction.clone()));
@@ -215,7 +220,8 @@ impl<'a> AsmParser<'a> {
                             match mode {
                                 TokenMode::Absolute
                                 | TokenMode::AbsoluteIndexedX
-                                | TokenMode::AbsoluteIndexedY => {
+                                | TokenMode::AbsoluteIndexedY
+                                | TokenMode::Indirect => {
                                     match tokens.next() {
                                         Some(Token::U16(value)) => {
                                             let [a, b] = value.to_le_bytes();
@@ -233,7 +239,9 @@ impl<'a> AsmParser<'a> {
                                 TokenMode::ZeroPageOrRelative
                                 | TokenMode::ZeroPageX
                                 | TokenMode::ZeroPageY
-                                | TokenMode::Immediate => {
+                                | TokenMode::Immediate
+                                | TokenMode::IndirectX
+                                | TokenMode::IndirectY => {
                                     match tokens.next() {
                                         Some(Token::U8(value)) => bytes.push(*value),
                                         Some(token) => return Err(format!("Expected a u8 to be the operand of an operation, but found a: {:?}", token)),
@@ -241,9 +249,6 @@ impl<'a> AsmParser<'a> {
                                     };
                                 }
                                 TokenMode::Implied | TokenMode::None => {}
-                                TokenMode::Indirect
-                                | TokenMode::IndirectX
-                                | TokenMode::IndirectY => return Err("Unhandled mode.".to_string()),
                             }
                         }
                         _ => {
@@ -293,16 +298,16 @@ impl<'a> AsmParser<'a> {
         }
     }
 
-    fn next_characters_u8_or_u16(&mut self) -> Result<(Option<u8>, Option<u16>), String> {
-        let word = self.get_word(None);
+    fn next_characters_u8_or_u16(&mut self) -> Result<U8OrU16, String> {
+        let word = self.get_word(None)?;
         match word.len() {
             2 => match u8::from_str_radix(&word, 16) {
                 Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-                Ok(value) => Ok((Some(value), None)),
+                Ok(value) => Ok(U8OrU16::U8(value)),
             },
             4 => match u16::from_str_radix(&word, 16) {
                 Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-                Ok(value) => Ok((None, Some(value))),
+                Ok(value) => Ok(U8OrU16::U16(value)),
             },
             _ => Err("Unable to extract a number.".to_string()),
         }
@@ -319,6 +324,18 @@ impl<'a> AsmParser<'a> {
         match self.characters.peek() {
             Some(character) => *character == value,
             None => false,
+        }
+    }
+
+    fn expect_next_character(&mut self, value: char) -> Result<(), String> {
+        let next_char = self.next_character_or_err()?;
+        if next_char == value {
+            Ok(())
+        } else {
+            Err(format!(
+                "Expected the character {} but found {}",
+                value, next_char
+            ))
         }
     }
 
@@ -357,55 +374,93 @@ impl<'a> AsmParser<'a> {
                             return self.continue_to_end_of_line();
                         }
                         Character::Value('$') => {
-                            let value = self.next_characters_u8_or_u16()?;
-                            if value.0.is_some() {
-                                let value_u8 = value.0.unwrap();
+                            match self.next_characters_u8_or_u16()? {
+                                U8OrU16::U8(value_u8) => {
+                                    // Figure out the mode.
+                                    if self.peek_is_next_character(',') {
+                                        // Skip the ","
+                                        self.next_character_or_err()?;
+                                        let character = self.next_character_or_err()?;
+                                        self.tokens.push(match character {
+                                            'x' => Token::Mode(TokenMode::ZeroPageX),
+                                            'y' => Token::Mode(TokenMode::ZeroPageY),
+                                            _ => {
+                                                return Err(format!(
+                                                    "Unexpected index mode: {}",
+                                                    character
+                                                ))
+                                            }
+                                        });
+                                    } else {
+                                        self.tokens
+                                            .push(Token::Mode(TokenMode::ZeroPageOrRelative));
+                                    }
 
-                                // Figure out the mode.
-                                if self.peek_is_next_character(',') {
-                                    // Skip the ","
-                                    self.next_character_or_err()?;
+                                    self.tokens.push(Token::U8(value_u8));
+                                }
+                                U8OrU16::U16(value_u16) => {
+                                    // Figure out the mode.
+                                    if self.peek_is_next_character(',') {
+                                        // Skip the ","
+                                        self.next_character_or_err()?;
+                                        let character = self.next_character_or_err()?;
+                                        self.tokens.push(match character {
+                                            'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
+                                            'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
+                                            _ => {
+                                                return Err(format!(
+                                                    "Unexpected index mode: {}",
+                                                    character
+                                                ))
+                                            }
+                                        });
+                                    } else {
+                                        self.tokens.push(Token::Mode(TokenMode::Absolute));
+                                    }
+
+                                    self.tokens.push(Token::U16(value_u16));
+                                }
+                            }
+                            return self.continue_to_end_of_line();
+                        }
+                        Character::Value('(') => {
+                            // jmp ($1234) ; indirect
+                            // and ($aa,X) ; indirect indexed x
+                            // and ($aa),Y ; indirect indexed y
+                            self.expect_next_character('$')?;
+                            match self.next_characters_u8_or_u16()? {
+                                U8OrU16::U8(value_u8) => {
+                                    // and ($aa,X) ; indirect indexed x
+                                    // and ($aa),Y ; indirect indexed y
                                     let character = self.next_character_or_err()?;
-                                    self.tokens.push(match character {
-                                        'x' => Token::Mode(TokenMode::ZeroPageX),
-                                        'y' => Token::Mode(TokenMode::ZeroPageY),
+                                    match char_to_enum(&character) {
+                                        Character::Value(',') => {
+                                            // and ($aa,X) ; indirect indexed x
+                                            self.expect_next_character('X')?;
+                                            self.expect_next_character(')')?;
+                                            self.tokens.push(Token::Mode(TokenMode::IndirectX));
+                                        }
+                                        Character::Value(')') => {
+                                            // and ($aa),Y ; indirect indexed y
+                                            self.expect_next_character(',')?;
+                                            self.expect_next_character('Y')?;
+                                            self.tokens.push(Token::Mode(TokenMode::IndirectY));
+                                        }
                                         _ => {
                                             return Err(format!(
-                                                "Unexpected index mode: {}",
+                                                "Unexpected character {:?}",
                                                 character
                                             ))
                                         }
-                                    });
-                                } else {
-                                    self.tokens.push(Token::Mode(TokenMode::ZeroPageOrRelative));
+                                    }
+                                    self.tokens.push(Token::U8(value_u8));
                                 }
-
-                                self.tokens.push(Token::U8(value_u8));
-                            } else if value.1.is_some() {
-                                let value_u16 = value.1.unwrap();
-
-                                // Figure out the mode.
-                                if self.peek_is_next_character(',') {
-                                    // Skip the ","
-                                    self.next_character_or_err()?;
-                                    let character = self.next_character_or_err()?;
-                                    self.tokens.push(match character {
-                                        'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
-                                        'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
-                                        _ => {
-                                            return Err(format!(
-                                                "Unexpected index mode: {}",
-                                                character
-                                            ))
-                                        }
-                                    });
-                                } else {
-                                    self.tokens.push(Token::Mode(TokenMode::Absolute));
+                                U8OrU16::U16(value_u16) => {
+                                    // jmp ($1234) ; indirect
+                                    self.tokens.push(Token::Mode(TokenMode::Indirect));
+                                    self.tokens.push(Token::U16(value_u16));
+                                    self.expect_next_character(')')?;
                                 }
-
-                                self.tokens.push(Token::U16(value_u16));
-                            } else {
-                                panic!("Expected next_characters_u8_or_u16 to return a value");
                             }
                             return self.continue_to_end_of_line();
                         }
@@ -477,7 +532,7 @@ impl<'a> AsmParser<'a> {
         }
     }
 
-    fn get_word(&mut self, starting_char: Option<&char>) -> String {
+    fn get_word(&mut self, starting_char: Option<&char>) -> Result<String, String> {
         let mut word = String::new();
         match starting_char {
             Some(starting_char) => {
@@ -491,10 +546,15 @@ impl<'a> AsmParser<'a> {
                 word.push(character);
                 self.next_character();
             },
-            _ => break,
+            value => {
+                if word.len() == 0 {
+                    return Err(format!("Expected to find an alpha-numeric value, but instead found {:?}", value));
+                }
+                break
+            },
         });
 
-        return word;
+        return Ok(word);
     }
 }
 #[cfg(test)]
@@ -540,6 +600,10 @@ mod test {
     }
 
     #[test]
+    fn test_ind_jmp() {
+        assert_program!("jmp ($1234)", [JMP_ind, 0x34, 0x12]);
+    }
+    #[test]
     fn test_all_modes() {
         assert_program!(
             "
@@ -554,14 +618,14 @@ mod test {
                 sta $05,x   ; zero page indexed X
                 stx $06,y   ; zero page indexed Y
 
-                ; TODO
-                ; TokenMode::Indirect
-                ; TokenMode::IndirectX
-                ; TokenMode::IndirectY
+                jmp ($1234) ; indirect
+                and ($aa,X) ; indirect indexed x
+                and ($bb),Y ; indirect indexed y
             ",
             [
                 LDA_imm, 0x66, ORA_abs, 0x34, 0x12, ASL_abx, 0x34, 0x12, EOR_aby, 0x34, 0x12,
-                BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06
+                BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind, 0x34, 0x12,
+                AND_izx, 0xaa, AND_izx, 0xbb
             ]
         );
     }

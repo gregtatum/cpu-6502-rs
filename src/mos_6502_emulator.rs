@@ -275,13 +275,15 @@ impl Mos6502Cpu {
       // the instruction. For example, the CLC instruction is implied, it is going
       // to clear the processor's Carry flag.
       Mode::Implied => panic!("An implied mode should never be directly activated."),
-      Mode::Indirect => panic!("Unhandled mode."),
-      Mode::IndirectX => {
-        panic!("Unhandled mode. Incurs an extra cycle if crossing a page boundary.")
+      // The indirect addressing mode is similar to the absolute mode, but the
+      // next u16 is actually a pointer to another address. Use this next address
+      // for the operation.
+      Mode::Indirect => {
+        let address = self.next_u16();
+        return self.bus.read_u16(address);
       }
-      Mode::IndirectY => {
-        panic!("Unhandled mode. Incurs an extra cycle if crossing a page boundary.")
-      }
+      Mode::IndirectX => self.next_u8().wrapping_add(self.x) as u16,
+      Mode::IndirectY => self.next_u8().wrapping_add(self.y) as u16,
       // Relative addressing on the 6502 is only used for branch operations. The byte
       // after the opcode is the branch offset. If the branch is taken, the new address
       // will the the current PC plus the offset. The offset is a signed byte, so it can
@@ -313,8 +315,11 @@ impl Mos6502Cpu {
       // be in the zero page. If the instruction is LDA $C0,X, and X is $60, then
       // the target address will be $20. $C0+$60 = $120, but the carry is discarded
       // in the calculation of the target address.
-      Mode::ZeroPageX => (self.next_u8() + self.x) as u16,
-      Mode::ZeroPageY => (self.next_u8() + self.y) as u16,
+      //
+      // 6502 bug: Zeropage index will not leave zeropage when page boundary is crossed.
+      //           Make sure and do a wrapping add in u8 space.
+      Mode::ZeroPageX => (self.next_u8().wrapping_add(self.x)) as u16,
+      Mode::ZeroPageY => (self.next_u8().wrapping_add(self.y)) as u16,
       Mode::None => panic!("Mode::None is attempting to be used."),
     }
   }
