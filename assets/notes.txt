@@ -17,4 +17,8 @@ Other guides:
   http://www.oxyron.de/html/opcodes02.html
 
 NES Wiki:
+  https://wiki.nesdev.com/w/index.php/Nesdev_Wiki
   https://wiki.nesdev.com/w/index.php/Status_flags
+
+NES Hacker Wiki:
+  http://www.thealmightyguru.com/Games/Hacking/Wiki/
