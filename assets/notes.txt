@@ -13,8 +13,10 @@ Other guides:
   http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=Category:Guides
   http://www.emulator101.com/
 
-6520 Spec:
-  http://www.oxyron.de/html/opcodes02.html
+6520:
+  Opcodes with a table: http://www.oxyron.de/html/opcodes02.html
+  V Flag: http://www.6502.org/tutorials/vflag.html
+  Programming it: https://skilldrick.github.io/easy6502/#snake
 
 NES Wiki:
   https://wiki.nesdev.com/w/index.php/Nesdev_Wiki
