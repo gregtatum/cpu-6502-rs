@@ -792,14 +792,14 @@ mod test {
     assert_eq!(cpu.cycles, 4, "cpu.cycles");
   }
 
-  use crate::asm_to_tokens::AsmParser;
+  use crate::asm::AsmLexer;
 
   fn run_program(text: &str) -> Mos6502Cpu {
-    let mut parser = AsmParser::new(text);
+    let mut lexer = AsmLexer::new(text);
 
-    match parser.parse() {
+    match lexer.parse() {
       Ok(_) => {
-        let mut program = parser.to_bytes().unwrap();
+        let mut program = lexer.to_bytes().unwrap();
         program.push(OpCode::KIL as u8);
         let mut cpu = Mos6502Cpu::new({
           let mut bus = Bus::new();

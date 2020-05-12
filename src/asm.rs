@@ -63,7 +63,7 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    fn new(message: String, parser: &AsmParser) -> ParseError {
+    fn new(message: String, parser: &AsmLexer) -> ParseError {
         let error_row_index = parser.row as usize - 1;
         let range = 3;
         let min = (error_row_index as i64 - range).max(0) as usize;
@@ -123,7 +123,7 @@ impl ParseError {
     }
 }
 
-pub struct AsmParser<'a> {
+pub struct AsmLexer<'a> {
     text: &'a str,
     lines: std::str::Lines<'a>,
     characters: std::iter::Peekable<Chars<'a>>,
@@ -132,9 +132,9 @@ pub struct AsmParser<'a> {
     column: u64,
 }
 
-impl<'a> AsmParser<'a> {
-    pub fn new(text: &'a str) -> AsmParser {
-        AsmParser {
+impl<'a> AsmLexer<'a> {
+    pub fn new(text: &'a str) -> AsmLexer {
+        AsmLexer {
             text,
             characters: IntoIterator::into_iter("".chars()).peekable(),
             lines: IntoIterator::into_iter(text.lines()),
@@ -156,6 +156,8 @@ impl<'a> AsmParser<'a> {
         Err(format!("{} Location: {}:{}", reason, self.row, self.column))
     }
 
+    /// For now the asm is simple enough to parse in one pass. Once I get to labels
+    /// and other features I'll change it up to an AST.
     pub fn parse(&mut self) -> Result<(), ParseError> {
         loop {
             match self.lines.next() {
@@ -578,7 +580,7 @@ mod test {
 
     macro_rules! assert_program {
         ( $text:expr, [$( $bytes:expr ),*] ) => {
-            let mut parser = AsmParser::new($text);
+            let mut parser = AsmLexer::new($text);
 
             match parser.parse() {
                 Ok(_) => {
