@@ -27,30 +27,60 @@ pub fn eor(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(cpu.a);
 }
 
+fn add_impl(cpu: &mut Mos6502Cpu, operand: u8) {
+  // Translating to u16 means that the values won't wrap, so wrapping
+  // add is not needed.
+  let result_u16 =
+    // Get the carry from the previous operation, and carry it over
+    // into this one, but operate in the u16 space as to not overflow.
+    cpu.get_carry() as u16 + // Either 0x00 or 0x01
+    cpu.a as u16 +
+    operand as u16;
+
+  let result_u8 = result_u16 as u8;
+
+  cpu.update_zero_and_negative_flag(result_u8);
+  // Take the 0x100 value here, and set it to the register. This can then carry
+  // over into the next byte of a number.
+  cpu.update_carry_flag(result_u16);
+  cpu.update_overflow_flag(operand, result_u8);
+  cpu.a = result_u8;
+}
+
 /// Add with Carry
-/// Function: A:=A+{adr}
+/// Function: A:=A+{adr}+C
 /// Flags: N V Z C
 pub fn adc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
   let (_, operand) = cpu.get_operand(mode, extra_cycle);
-  // Translating to u16 means that the values won't wrap, so wrapping
-  // add is not needed.
-  let result = cpu.get_carry() as u16 + cpu.a as u16 + operand as u16;
-  cpu.update_zero_and_negative_flag(cpu.a);
-  cpu.update_carry_flag(result);
-  cpu.update_overflow_flag(operand, result);
-  cpu.a = result as u8;
+  add_impl(cpu, operand);
 }
 
-/// Substract with Carry
-/// Function: A:=A-{adr}
+/// Subtract with Carry
+/// Function: A:=A-{adr}+C
 /// Flags: N V Z C
 pub fn sbc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
-  let operand = !cpu.get_operand(mode, extra_cycle).1;
-  let result = cpu.get_carry() as u16 + cpu.a as u16 + operand as u16;
-  cpu.update_zero_and_negative_flag(cpu.a);
-  cpu.update_carry_flag(result);
-  cpu.update_overflow_flag(operand, result);
-  cpu.a = result as u8;
+  // Signed numbers range: -128 to 127
+  // 0b0000_0000, 0
+  // 0b0000_0001, 1
+  // 0b0000_0010, 1
+  // ...
+  // 0b0111_1111, 127
+  // 0b1000_0000, -128
+  // 0b1000_0001, -127
+  // ...
+  // 0b1111_1111, -1
+
+  let (_, operand) = cpu.get_operand(mode, extra_cycle);
+
+  // In order to properly subtract we need the two's complement of the operand.
+  // Normally this would be accomplished by;
+  // `let twos_complement = !operand + 0x1;`
+  //
+  // However, in this CPU, this is done by inverting the operand here, and letting
+  // the carry flag be the + 1.
+  //
+  // Because of this, it's assumed the assembly will run SEC before running sbc.
+  add_impl(cpu, !operand);
 }
 
 /// Compare A with source

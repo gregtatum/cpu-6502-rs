@@ -55,7 +55,7 @@ macro_rules! iter_peek_match {
 type TokenizerResult = Result<(), String>;
 
 #[derive(Debug)]
-struct ParseError {
+pub struct ParseError {
     message: String,
     nice_message: String,
     column: u64,
@@ -118,7 +118,7 @@ impl ParseError {
         }
     }
 
-    fn panic_nicely(self) {
+    pub fn panic_nicely(self) {
         panic!(self.nice_message);
     }
 }
@@ -133,7 +133,7 @@ pub struct AsmParser<'a> {
 }
 
 impl<'a> AsmParser<'a> {
-    fn new(text: &'a str) -> AsmParser {
+    pub fn new(text: &'a str) -> AsmParser {
         AsmParser {
             text,
             characters: IntoIterator::into_iter("".chars()).peekable(),
@@ -156,7 +156,7 @@ impl<'a> AsmParser<'a> {
         Err(format!("{} Location: {}:{}", reason, self.row, self.column))
     }
 
-    fn parse(&mut self) -> Result<(), ParseError> {
+    pub fn parse(&mut self) -> Result<(), ParseError> {
         loop {
             match self.lines.next() {
                 Some(line) => {
@@ -202,11 +202,11 @@ impl<'a> AsmParser<'a> {
         }
     }
 
-    fn to_tokens(self) -> Vec<Token> {
+    pub fn to_tokens(self) -> Vec<Token> {
         self.tokens
     }
 
-    fn to_bytes(self) -> Result<Vec<u8>, String> {
+    pub fn to_bytes(self) -> Result<Vec<u8>, String> {
         let mut bytes: Vec<u8> = Vec::new();
         let mut tokens = self.tokens.iter().peekable();
         loop {
@@ -229,7 +229,7 @@ impl<'a> AsmParser<'a> {
                                             bytes.push(b);
                                         },
                                         Some(token) => return Err(
-                                            format!("Expected a u16 to be the operand of an operation, but found a: {:?}", token)
+                                            format!("Expected a u16 to be the operand of an operation, but found a: {:#x?}", token)
                                         ),
                                         None => return Err(
                                             "Expected a u16 to be the operand of an operation, but found nothing".to_string()
@@ -244,7 +244,7 @@ impl<'a> AsmParser<'a> {
                                 | TokenMode::IndirectY => {
                                     match tokens.next() {
                                         Some(Token::U8(value)) => bytes.push(*value),
-                                        Some(token) => return Err(format!("Expected a u8 to be the operand of an operation, but found a: {:?}", token)),
+                                        Some(token) => return Err(format!("Expected a u8 to be the operand of an operation, but found a: {:#x?}", token)),
                                         None => return Err("Expected a u8 to be the operand of an operation, but found nothing".to_string())
                                     };
                                 }
@@ -259,7 +259,7 @@ impl<'a> AsmParser<'a> {
                     },
                     token => {
                         return Err(format!(
-                            "Unexpected token. Expected an instrunction {:?}",
+                            "Unexpected token. Expected an instruction {:#x?}",
                             token
                         ))
                     }
@@ -271,15 +271,29 @@ impl<'a> AsmParser<'a> {
     }
 
     fn next_characters_u8(&mut self) -> Result<u8, String> {
-        let dollar = self.next_character_or_err()?;
-        self.verify_character(dollar, '$')?;
-
-        let mut string = String::new();
-        string.push(self.next_character_or_err()?);
-        string.push(self.next_character_or_err()?);
-        match u8::from_str_radix(&string, 16) {
-            Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-            Ok(value) => Ok(value),
+        match self.next_character_or_err()? {
+            '$' => {
+                // e.g. $33
+                let mut string = String::new();
+                string.push(self.next_character_or_err()?);
+                string.push(self.next_character_or_err()?);
+                match u8::from_str_radix(&string, 16) {
+                    Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                    Ok(value) => Ok(value),
+                }
+            }
+            '%' => {
+                // e.g. %11110000
+                let mut string = String::new();
+                for _ in 0..8 {
+                    string.push(self.next_character_or_err()?);
+                }
+                match u8::from_str_radix(&string, 2) {
+                    Err(err) => Err(format!("Unable to parse binary string as number {:?}", err)),
+                    Ok(value) => Ok(value),
+                }
+            }
+            character => Err(format!("Unexpected character {}", character)),
         }
     }
 
@@ -600,8 +614,9 @@ mod test {
     }
 
     #[test]
-    fn test_ind_jmp() {
+    fn test_various_codes_individually() {
         assert_program!("jmp ($1234)", [JMP_ind, 0x34, 0x12]);
+        assert_program!("lda #$22", [LDA_imm, 0x22]);
     }
     #[test]
     fn test_all_modes() {
@@ -621,11 +636,13 @@ mod test {
                 jmp ($1234) ; indirect
                 and ($aa,X) ; indirect indexed x
                 and ($bb),Y ; indirect indexed y
+
+                kil;
             ",
             [
                 LDA_imm, 0x66, ORA_abs, 0x34, 0x12, ASL_abx, 0x34, 0x12, EOR_aby, 0x34, 0x12,
                 BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind, 0x34, 0x12,
-                AND_izx, 0xaa, AND_izx, 0xbb
+                AND_izx, 0xaa, AND_izy, 0xbb, KIL
             ]
         );
     }

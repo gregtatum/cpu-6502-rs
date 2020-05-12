@@ -166,28 +166,28 @@ pub fn bit(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 /// Function: C:=0
 /// Flags: C
 pub fn clc(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
-  cpu.set_status_flag(StatusFlag::Zero, false);
+  cpu.set_status_flag(StatusFlag::Carry, false);
 }
 
 /// Set Carry flag
 /// Function: C:=1
 /// Flags: C
 pub fn sec(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
-  cpu.set_status_flag(StatusFlag::Zero, true);
+  cpu.set_status_flag(StatusFlag::Carry, true);
 }
 
 /// Clear Decimal flag
 /// Function: D:=0
 /// Flags: D
 pub fn cld(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
-  cpu.set_status_flag(StatusFlag::Zero, false);
+  cpu.set_status_flag(StatusFlag::Decimal, false);
 }
 
 /// Set Decimal flag
 /// Function: D:=1
 /// Flags: D
 pub fn sed(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
-  cpu.set_status_flag(StatusFlag::Zero, true);
+  cpu.set_status_flag(StatusFlag::Decimal, true);
 }
 
 /// Clear Interrupt disable
@@ -214,6 +214,7 @@ pub fn clv(cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
 /// No operation
 /// Function:
 /// Flags:
-pub fn nop(_cpu: &mut Mos6502Cpu, _mode: Mode, _extra_cycle: u8) {
-  // Do nothing, wheee!
+pub fn nop(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
+  // Spin some cycles and move the pc, but otherwise do nothing.
+  cpu.get_operand(mode, extra_cycle);
 }

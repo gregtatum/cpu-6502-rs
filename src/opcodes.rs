@@ -175,6 +175,7 @@ pub fn match_instruction(string: &str) -> Option<Instruction> {
     "sei" => Instruction::SEI,
     "clv" => Instruction::CLV,
     "nop" => Instruction::NOP,
+    "kil" => Instruction::KIL,
     _ => return None,
   };
   Some(instruction)
