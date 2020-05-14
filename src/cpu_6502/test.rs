@@ -200,8 +200,3 @@ mod immediate_mode {
     // register_a!(, "xaa #$22", 0x22, P);
   }
 }
-
-// Run two's complement on a u8.
-fn negative(n: u8) -> u8 {
-  !n + 1
-}

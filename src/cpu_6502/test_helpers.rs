@@ -38,6 +38,11 @@ pub fn run_program(text: &str) -> Cpu6502 {
   }
 }
 
+/// Run two's complement on a u8.
+pub fn negative(n: u8) -> u8 {
+  !n + 1
+}
+
 pub fn assert_register_a(text: &str, value: u8, status: u8) {
   let cpu = run_program(text);
   if cpu.a != value {
