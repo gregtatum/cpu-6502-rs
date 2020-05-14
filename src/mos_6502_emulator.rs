@@ -1006,33 +1006,42 @@ mod test {
     //             |          |     |  |
     // register_a!(test_adc1, 0x33, P, "lda #$22\nadc #$11",);
 
-    // This first test shows: 0x22 + 0x11 == 0x33.
-    // P is the default "P" or status register values.
-    register_a!(test_adc1, 0x33, P, "lda #$22\nadc #$11");
-    // This add doesn't do anything, but the N, or negative flag is set since the most
-    // significant bit is 1.
-    register_a!(test_adc2, 0xff, P | N, "lda #$FF\nadc #$00");
-    // Here we overflow the u8.
-    register_a!(
-      test_adc3,
-      0x00,
-      P
-      | C // For unsigned numbers, the carry bit is flipped, since the result carries over.
-      | Z, // The result is 0x00 (with the carry only in the status register)
-      "
-        lda #$FF  ; 255 signed, or -1 unsigned
-        adc #$01  ;   1 signed, or 1 unsigned
-      "
-    );
-    // This is a similar result as above, but the final resut is not 0.
-    register_a!(test_adc4, 0x01, P | C, "lda #$FF\nadc #$02");
-    // Check that this uses the carry flag.
-    register_a!(test_adc_carry, 0x34, P, "
-      sec      ; Set the carry flag
-      lda #$11 ; Load A with a value
-      adc #$22 ; This should add all three values
-              ; = 0x01 + 0x11 + 0x22
-    ");
+    mod adc_basics {
+      use super::*;
+      // This first test shows: 0x22 + 0x11 == 0x33.
+      // P is the default "P" or status register values.
+      register_a!(test_adc1, 0x33, P, "
+        lda #$22
+        adc #$11
+      ");
+      // This add doesn't do anything, but the N, or negative flag is set since the most
+      // significant bit is 1.
+      register_a!(test_adc2, 0xff, P | N, "
+        lda #$FF
+        adc #$00
+      ");
+      // Here we overflow the u8.
+      register_a!(
+        test_adc3,
+        0x00,
+        P
+        | C // For unsigned numbers, the carry bit is flipped, since the result carries over.
+        | Z, // The result is 0x00 (with the carry only in the status register)
+        "
+          lda #$FF  ; 255 signed, or -1 unsigned
+          adc #$01  ;   1 signed, or 1 unsigned
+        "
+      );
+      // This is a similar result as above, but the final resut is not 0.
+      register_a!(test_adc4, 0x01, P | C, "lda #$FF\nadc #$02");
+      // Check that this uses the carry flag.
+      register_a!(test_adc_carry, 0x34, P, "
+        sec      ; Set the carry flag
+        lda #$11 ; Load A with a value
+        adc #$22 ; This should add all three values
+                ; = 0x01 + 0x11 + 0x22
+      ");
+    }
 
     mod adc_overflow_carry {
       // This section tests the adc cases from:
