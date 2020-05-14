@@ -84,6 +84,7 @@ pub fn sbc(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 }
 
 /// Compare A with source
+/// http://6502.org/tutorials/compare_instructions.html
 /// Function: A-{adr}
 /// Flags: N Z C
 pub fn cmp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
@@ -93,6 +94,7 @@ pub fn cmp(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 }
 
 /// Compare X with source
+/// http://6502.org/tutorials/compare_instructions.html
 /// Function: X-{adr}
 /// Flags: N Z C
 pub fn cpx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
@@ -102,6 +104,7 @@ pub fn cpx(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
 }
 
 /// Compare Y with source
+/// http://6502.org/tutorials/compare_instructions.html
 /// Function: Y-{adr}
 /// Flags: N Z C
 pub fn cpy(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {

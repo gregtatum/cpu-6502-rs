@@ -636,8 +636,11 @@ impl Mos6502Cpu {
     self.set_status_flag(StatusFlag::Carry, result & carry == carry);
   }
 
-  /// Overflow for ADC and SBC indicates if we overflow the most significant bit
-  /// of the u8, and change the meaning of a number from being negative or positive.
+  /// Overflow for ADC and SBC indicates if we overflow from bit 6 to bit 7 of the u8,
+  /// and change the meaning of a number from being negative or positive.
+  /// e.g. 0b0111_1111 + 0b0000_0001 = 0b1000_0000
+  ///        |             |             |
+  ///        positive      positive      negative result
   fn update_overflow_flag(&mut self, operand: u8, result: u8) {
     let bit_7_mask = 0b1000_0000;
 
@@ -932,7 +935,7 @@ mod test {
   }
 
   macro_rules! register_a {
-    ($name:ident, $text:expr, $a:expr, $p:expr) => {
+    ($name:ident, $a:expr, $p:expr, $text:expr) => {
       #[test]
       fn $name() {
         assert_register_a($text, $a, $p);
@@ -941,7 +944,7 @@ mod test {
   }
 
   macro_rules! register_x {
-    ($name:ident, $text:expr, $x:expr, $p:expr) => {
+    ($name:ident, $x:expr, $p:expr, $text:expr) => {
       #[test]
       fn $name() {
         assert_register_x($text, $x, $p);
@@ -950,10 +953,30 @@ mod test {
   }
 
   macro_rules! register_y {
-    ($name:ident, $text:expr, $y:expr, $p:expr) => {
+    ($name:ident, $y:expr, $p:expr, $text:expr) => {
       #[test]
       fn $name() {
         assert_register_y($text, $y, $p);
+      }
+    };
+  }
+
+  // #[allow(unused_macros)]
+  macro_rules! zero_page {
+    ($name:ident, $text:expr, $a:expr, $p:expr) => {
+      #[test]
+      fn $name() {
+        assert_register_a($text, $a, $p);
+      }
+    };
+  }
+
+  macro_rules! status {
+    ($name:ident, $p:expr, $text:expr) => {
+      #[test]
+      fn $name() {
+        let cpu = run_program($text);
+        assert_status(&cpu, $p);
       }
     };
   }
@@ -978,114 +1001,85 @@ mod test {
     //
     // `cargo test mos_6502_emulator::test::imm::test_adc1`
     //
-    //             TestName   Program               Register Result
-    //             |          |                     |     Status Register
-    //             |          |                     |     |
-    // register_a!(test_adc1, "lda #$22\nadc #$11", 0x33, P);
+    //      TestName   Register        Program
+    //             |          | Status |
+    //             |          |     |  |
+    // register_a!(test_adc1, 0x33, P, "lda #$22\nadc #$11",);
 
     // This first test shows: 0x22 + 0x11 == 0x33.
     // P is the default "P" or status register values.
-    register_a!(test_adc1, "lda #$22\nadc #$11", 0x33, P);
+    register_a!(test_adc1, 0x33, P, "lda #$22\nadc #$11");
     // This add doesn't do anything, but the N, or negative flag is set since the most
     // significant bit is 1.
-    register_a!(test_adc2, "lda #$FF\nadc #$00", 0xff, P | N);
+    register_a!(test_adc2, 0xff, P | N, "lda #$FF\nadc #$00");
     // Here we overflow the u8.
     register_a!(
       test_adc3,
+      0x00,
+      P
+      | C // For unsigned numbers, the carry bit is flipped, since the result carries over.
+      | Z, // The result is 0x00 (with the carry only in the status register)
       "
         lda #$FF  ; 255 signed, or -1 unsigned
         adc #$01  ;   1 signed, or 1 unsigned
-      ",
-      0x00,
-      P
-      | C // For unsigned numbers, te carry bit is flipped, since the result carries over.
-      | Z // The result is 0x00 (with the carry only in the status register)
+      "
     );
     // This is a similar result as above, but the final resut is not 0.
-    register_a!(test_adc4, "lda #$FF\nadc #$02", 0x01, P | C);
+    register_a!(test_adc4, 0x01, P | C, "lda #$FF\nadc #$02");
     // Check that this uses the carry flag.
-    register_a!(
-      test_adc_carry,
-      "
-        sec      ; Set the carry flag
-        lda #$11 ; Load A with a value
-        adc #$22 ; This should add all three values
-                 ; = 0x01 + 0x11 + 0x22
-      ",
-      0x34,
-      P
-    );
+    register_a!(test_adc_carry, 0x34, P, "
+      sec      ; Set the carry flag
+      lda #$11 ; Load A with a value
+      adc #$22 ; This should add all three values
+              ; = 0x01 + 0x11 + 0x22
+    ");
+
     mod adc_overflow_carry {
       // This section tests the adc cases from:
       // http://www.6502.org/tutorials/vflag.html
       use super::*;
-      register_a!(
-        test_1_1,
-        "
-          CLC      ; 1 + 1 = 2, returns C = 0
-          LDA #$01 ;            returns V = 0
-          ADC #$01
-        ",
-        0x02,
-        P
-      );
+      register_a!(test_1_1, 0x02, P, "
+        CLC      ; 1 + 1 = 2, returns C = 0
+        LDA #$01 ;            returns V = 0
+        ADC #$01
+      ");
       // 0b0000_0001
       // 0x1111_1111
       // 1_0000_0000
-      register_a!(
-        test_1_neg1,
-        "
-          CLC      ; 1 + -1 = 0, returns C = 1
-          LDA #$01 ;                     V = 0
-          ADC #$FF
-        ",
-        0x00,
-        P | C | Z
-      );
+      register_a!(test_1_neg1, 0x00, P | C | Z, "
+        CLC      ; 1 + -1 = 0, returns C = 1
+        LDA #$01 ;                     V = 0
+        ADC #$FF
+      ");
 
       // 0b0111_1111
       // 0b0000_0001
       // 0b1000_0000
-      register_a!(
-        test_127_1,
-        "
-          CLC      ; 127 + 1 = 128, returns C = 0
-          LDA #$7F ;                        V = 1
-          ADC #$01
-        ",
-        0b1000_0000,
-        P | V | N
-      );
+      register_a!(test_127_1, 0b1000_0000, P | V | N, "
+        CLC      ; 127 + 1 = 128, returns C = 0
+        LDA #$7F ;                        V = 1
+        ADC #$01
+      ");
 
       // 0x80 + 0xff
       // 0b1000_0000
       // 0b1111_1111
       // 1_0111_1111
-      register_a!(
-        test_neg128_negative_1,
-        "
-          CLC      ; -128 + -1 = -129, returns C = 1
-          LDA #$80 ;                           V = 1
-          ADC #$FF
-        ",
-        0b0111_1111,
-        P | C | V
-      );
+      register_a!(test_neg128_negative_1, 0b0111_1111, P | C | V, "
+        CLC      ; -128 + -1 = -129, returns C = 1
+        LDA #$80 ;                           V = 1
+        ADC #$FF
+      ");
 
       // 0b0011_1111  a
       // 0b0100_0000  operand
       // 0b0000_0001  carry
       // 0b0000_0000  result
-      register_a!(
-        test_carry,
-        "
-          SEC      ; Note: SEC, not CLC
-          LDA #$3F ; 63 + 64 + 1 = 128, returns V = 1
-          ADC #$40
-        ",
-        0b1000_0000,
-        P | V | N
-      );
+      register_a!(test_carry, 0b1000_0000, P | V | N, "
+        SEC      ; Note: SEC, not CLC
+        LDA #$3F ; 63 + 64 + 1 = 128, returns V = 1
+        ADC #$40
+      ");
     }
 
     mod sbc_overflow_carry {
@@ -1095,78 +1089,97 @@ mod test {
       // 0b0000_0000   two's comp   0b0000_0000
       // 0b0000_0001       ->       0b1111_1111
       //                            0b1111_1111
-      register_a!(
-        test_0_minus_1,
-        "
-          SEC      ; 0 - 1 = -1, returns V = 0
-          LDA #$00
-          SBC #$01
-        ",
-        negative(1),
-        P | N
-      );
+      register_a!(test_0_minus_1, negative(1), P | N, "
+        SEC      ; 0 - 1 = -1, returns V = 0
+        LDA #$00
+        SBC #$01
+      ");
 
       // 0b1000_0000    0b1000_0000
       // 0b0000_0001 -> 0b1111_1111
       //              0b1_0111_1111
-      register_a!(
-        test_neg128_minus_1,
-        "
-          SEC      ; -128 - 1 = -129, returns V = 1
-          LDA #$80
-          SBC #$01
-        ",
-        negative(129),
-        P | C | V
-      );
+      register_a!(test_neg128_minus_1, negative(129), P | C | V, "
+        SEC      ; -128 - 1 = -129, returns V = 1
+        LDA #$80
+        SBC #$01
+      ");
 
       // 0b0111_1111    0b0111_1111
       // 0b1111_1111 -> 0b0000_0001
       //                0b1000_0000
-      register_a!(
-        test_127_minus_neg1,
-        "
-          SEC      ; 127 - -1 = 128, returns V = 1
-          LDA #$7F
-          SBC #$FF
-        ",
-        128,
-        P | V | N
-      );
+      register_a!(test_127_minus_neg1, 128, P | V | N, "
+        SEC      ; 127 - -1 = 128, returns V = 1
+        LDA #$7F
+        SBC #$FF
+      ");
 
       //   0b1100_0000    0b1100_0000
       // - 0b0100_0000 => 0b1011_1111
       //                  1_0111_1111
-      register_a!(
-        test_clc,
-        "
-          CLC      ; Note: CLC, not SEC
-          LDA #$C0 ; -64 - 64 - 1 = -129, returns V = 1
-          SBC #$40
-        ",
-        negative(129),
-        P | C | V
-      );
+      register_a!(test_clc, negative(129), P | C | V, "
+        CLC      ; Note: CLC, not SEC
+        LDA #$C0 ; -64 - 64 - 1 = -129, returns V = 1
+        SBC #$40
+      ");
     }
 
-    // register_a!(test_, "alr #$22", 0x22, P); // illegal
-    // register_a!(test_, "anc #$22", 0x22, P); // illegal
-    // register_a!(test_, "axs #$22", 0x22, P); // illegal
-    // register_a!(test_, "arr #$22", 0x22, P); // illegal
-    // register_a!(test_, "cpx #$22", 0x22, P);
-    // register_a!(test_, "cpy #$22", 0x22, P);
-    // register_a!(test_, "cmp #$22", 0x22, P);
-    // register_a!(test_, "eor #$22", 0x22, P);
-    // register_a!(test_, "lax #$22", 0x22, P);
-    register_a!(test_lda, "lda #$22", 0x22, P);
-    register_x!(test_ldx, "ldx #$22", 0x22, P);
-    register_y!(test_ldy, "ldy #$22", 0x22, P);
-    register_a!(test_nop, "nop #$22", 0x00, P);
-    register_a!(test_sbc1, "sec\nlda #$33\n sbc #$11", 0x22, P | C);
-    register_a!(test_sbc2, "sec\nlda #$33\n sbc #$33", 0x00, P | Z | C);
-    register_a!(test_sbc3, "sec\nlda #$33\n sbc #$34", negative(1), P | N);
-    // register_a!(test_, "ora #$22", 0x22, P);
-    // register_a!(test_, "xaa #$22", 0x22, P);
+    mod compare {
+      use super::*;
+      // http://6502.org/tutorials/compare_instructions.html
+      status!(test_cmp_lt, P | N,     "lda #$11\ncmp #$22");
+      status!(test_cmp_gt, P | C,     "lda #$22\ncmp #$11");
+      status!(test_cmp_eq, P | C | Z, "lda #$11\ncmp #$11");
+      status!(test_cpx_lt, P | N,     "ldx #$11\ncpx #$22");
+      status!(test_cpx_gt, P | C,     "ldx #$22\ncpx #$11");
+      status!(test_cpx_eq, P | C | Z, "ldx #$11\ncpx #$11");
+      status!(test_cpy_lt, P | N,     "ldy #$11\ncpy #$22");
+      status!(test_cpy_gt, P | C,     "ldy #$22\ncpy #$11");
+      status!(test_cpy_eq, P | C | Z, "ldy #$11\ncpy #$11");
+    }
+
+    register_a!(test_and, 0b1010_0000, P | N, "
+      lda #%11110000
+      and #%10101010
+    ");
+    register_a!(test_eor, 0b0101_1010, P, "
+      lda #%11110000
+      eor #%10101010
+    ");
+    register_a!(test_ora, 0b1111_1010, P | N, "
+      lda #%11110000
+      ora #%10101010
+    ");
+
+    register_a!(test_lda, 0x22, P, "lda #$22");
+    register_x!(test_ldx, 0x22, P, "ldx #$22");
+    register_y!(test_ldy, 0x22, P, "ldy #$22");
+
+    register_a!(test_nop, 0x00, P, "nop #$22");
+
+    register_a!(test_sbc1, 0x22,        P | C, "
+      sec       ; Always set the carry flag first.
+      lda #$33
+      sbc #$11
+    ");
+    register_a!(test_sbc2, 0x00,        P | Z | C, "
+      sec       ; Always set the carry flag first.
+      lda #$33
+      sbc #$33
+    ");
+    register_a!(test_sbc3, negative(1), P | N, "
+      sec       ; Always set the carry flag first.
+      lda #$33
+      sbc #$34
+    ");
+
+    mod illegal {
+      // register_a!(test_, "alr #$22", 0x22, P);
+      // register_a!(test_, "anc #$22", 0x22, P);
+      // register_a!(test_, "axs #$22", 0x22, P);
+      // register_a!(test_, "arr #$22", 0x22, P);
+      // register_a!(test_, "lax #$22", 0x22, P);
+      // register_a!(test_, "xaa #$22", 0x22, P);
+    }
   }
 
   // Run two's complement on a u8.
