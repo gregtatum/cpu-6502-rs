@@ -6,6 +6,13 @@ mod opcodes_jump;
 mod opcodes_logical;
 mod opcodes_move;
 
+#[cfg(test)]
+mod test_helpers;
+
+// Test must be after test_helpers, rust format tries to move things around.
+#[cfg(test)]
+mod test;
+
 use opcodes_illegal::*;
 use opcodes_jump::*;
 use opcodes_logical::*;
@@ -44,8 +51,13 @@ pub enum ExtraCycle {
   IfTaken,
 }
 
-pub struct Mos6502Cpu {
-  // The bus is what
+/// This struct implements the CPU for the NES, the MOS Technology 6502.
+///
+/// http://www.6502.org/
+/// https://en.wikipedia.org/wiki/MOS_Technology_6502
+/// http://wiki.nesdev.com/w/index.php/CPU
+pub struct Cpu6502 {
+  // The bus is what holds all the memory access for the program.
   bus: Bus,
   // "A" register - The accumulator. Typical results of operations are stored here.
   // In combination with the status register, supports using the status register for
@@ -176,13 +188,13 @@ macro_rules! match_opcode {
   };
 }
 
-impl Mos6502Cpu {
-  fn new(bus: Bus) -> Mos6502Cpu {
+impl Cpu6502 {
+  fn new(bus: Bus) -> Cpu6502 {
     // Go ahead and read the first instruction from the reset vector. If the reset
     // vector is set again, the program will end.
     let pc = bus.read_u16(InterruptVectors::ResetVector as u16);
 
-    Mos6502Cpu {
+    Cpu6502 {
       bus,
       // Accumulator
       a: 0,
@@ -224,7 +236,7 @@ impl Mos6502Cpu {
   /// predicate is true.
   fn run_until<F>(&mut self, predicate: F)
   where
-    F: Fn(&Mos6502Cpu) -> bool,
+    F: Fn(&Cpu6502) -> bool,
   {
     while !predicate(self) {
       self.tick();
@@ -713,486 +725,5 @@ impl Mos6502Cpu {
     let stack_page = 0x01;
     let address = u16::from_le_bytes([self.s, stack_page]);
     self.bus.read_u16(address)
-  }
-}
-
-#[cfg(test)]
-mod test {
-  use super::super::opcodes::*;
-  use super::*;
-
-  fn run_program_until<F>(program: Vec<u8>, condition: F) -> Mos6502Cpu
-  where
-    F: Fn(&Mos6502Cpu) -> bool,
-  {
-    let mut cpu = Mos6502Cpu::new({
-      let mut bus = Bus::new();
-
-      // This will load the value into the accu
-      bus.load_program(&program);
-      bus
-    });
-
-    cpu.run_until(condition);
-    cpu
-  }
-
-  #[test]
-  fn load_value_into_accumulator_using_immediate_addressing() {
-    let cpu = run_program_until(
-      vec![
-        OpCode::LDA_imm as u8, // Load a value into the A register.
-        0x66,                  // Here is the value, which is 1 byte.
-      ],
-      |cpu| cpu.a == 0x66,
-    );
-
-    assert_eq!(cpu.a, 0x66, "cpu.a");
-    assert_eq!(cpu.cycles, 2, "cpu.cycles");
-  }
-
-  #[test]
-  fn run_logical_or_on_the_a_register() {
-    let a = 0b1010_1010;
-    let b = 0b1111_0000;
-    let result = 0b1111_1010;
-
-    assert!(a | b == result, "Check out the assumption on the values");
-
-    let cpu = run_program_until(
-      vec![
-        OpCode::LDA_imm as u8, // Load a value into the A register.
-        a,                     // Here is the value, which is 1 byte.
-        OpCode::ORA_imm as u8, // The | operator
-        b,                     // Now the operand for the operation
-      ],
-      |cpu| cpu.a == result,
-    );
-
-    assert_eq!(cpu.a, result, "cpu.a");
-    assert_eq!(cpu.cycles, 4, "cpu.cycles");
-  }
-
-  #[test]
-  fn run_logical_and_on_the_a_register() {
-    let a = 0b1010_1010;
-    let b = 0b1111_0000;
-    let result = 0b1010_0000;
-
-    assert!(a & b == result, "Check out the assumption on the values");
-
-    let cpu = run_program_until(
-      vec![
-        OpCode::LDA_imm as u8, // Load a value into the A register.
-        a,                     // Here is the value, which is 1 byte.
-        OpCode::AND_imm as u8, // The & operator
-        b,                     // Now the operand for the operation
-      ],
-      |cpu| cpu.a == result,
-    );
-
-    assert_eq!(cpu.a, result, "cpu.a");
-    assert_eq!(cpu.cycles, 4, "cpu.cycles");
-  }
-
-  use crate::asm::AsmLexer;
-
-  fn run_program(text: &str) -> Mos6502Cpu {
-    let mut lexer = AsmLexer::new(text);
-
-    match lexer.parse() {
-      Ok(_) => {
-        let mut program = lexer.to_bytes().unwrap();
-        program.push(OpCode::KIL as u8);
-        let mut cpu = Mos6502Cpu::new({
-          let mut bus = Bus::new();
-
-          // This will load the value into the accu
-          bus.load_program(&program);
-          bus
-        });
-
-        cpu.run();
-        cpu
-      }
-      Err(parse_error) => {
-        parse_error.panic_nicely();
-        panic!("");
-      }
-    }
-  }
-
-  fn assert_register_a(text: &str, value: u8, status: u8) {
-    let cpu = run_program(text);
-    if cpu.a != value {
-      panic!(
-        "\n{}\nExpected register A to be {:#x} ({:#b}) but it was {:#x} ({:#b})",
-        text, value, value, cpu.a, cpu.a
-      );
-    }
-    assert_status(&cpu, status);
-  }
-
-  fn assert_register_x(text: &str, value: u8, status: u8) {
-    let cpu = run_program(text);
-    if cpu.x != value {
-      panic!(
-        "\n{}\nExpected register X to be {:#x} ({:#b}) but it was {:#x} ({:#b})",
-        text, value, value, cpu.x, cpu.x
-      );
-    }
-    assert_status(&cpu, status);
-  }
-
-  fn assert_register_y(text: &str, value: u8, status: u8) {
-    let cpu = run_program(text);
-    if cpu.y != value {
-      panic!(
-        "\n{}\nExpected register X to be {:#x} ({:#b}) but it was {:#x} ({:#b})",
-        text, value, value, cpu.x, cpu.x
-      );
-    }
-    assert_status(&cpu, status);
-  }
-
-  fn assert_status(cpu: &Mos6502Cpu, value: u8) {
-    let mut result = String::new();
-
-    let expected_carry = value & StatusFlag::Carry as u8 == StatusFlag::Carry as u8;
-    let expected_zero = value & StatusFlag::Zero as u8 == StatusFlag::Zero as u8;
-    let expected_interruptdisable =
-      value & StatusFlag::InterruptDisable as u8 == StatusFlag::InterruptDisable as u8;
-    let expected_decimal = value & StatusFlag::Decimal as u8 == StatusFlag::Decimal as u8;
-    let expected_break = value & StatusFlag::Break as u8 == StatusFlag::Break as u8;
-    let expected_push = value & StatusFlag::Push as u8 == StatusFlag::Push as u8;
-    let expected_overflow = value & StatusFlag::Overflow as u8 == StatusFlag::Overflow as u8;
-    let expected_negative = value & StatusFlag::Negative as u8 == StatusFlag::Negative as u8;
-
-    let actual_carry = cpu.is_status_flag_set(StatusFlag::Carry);
-    let actual_zero = cpu.is_status_flag_set(StatusFlag::Zero);
-    let actual_interruptdisable = cpu.is_status_flag_set(StatusFlag::InterruptDisable);
-    let actual_decimal = cpu.is_status_flag_set(StatusFlag::Decimal);
-    let actual_break = cpu.is_status_flag_set(StatusFlag::Break);
-    let actual_push = cpu.is_status_flag_set(StatusFlag::Push);
-    let actual_overflow = cpu.is_status_flag_set(StatusFlag::Overflow);
-    let actual_negative = cpu.is_status_flag_set(StatusFlag::Negative);
-
-    if expected_carry != actual_carry {
-      result.push_str(&format!(
-        "Expected StatusFlag::Carry to be {} but received {}\n",
-        expected_carry, actual_carry
-      ));
-    }
-    if expected_zero != actual_zero {
-      result.push_str(&format!(
-        "Expected StatusFlag::Zero to be {} but received {}\n",
-        expected_zero, actual_zero
-      ));
-    }
-    if expected_interruptdisable != actual_interruptdisable {
-      result.push_str(&format!(
-        "Expected StatusFlag::InterruptDisable to be {} but received {}\n",
-        expected_interruptdisable, actual_interruptdisable
-      ));
-    }
-    if expected_decimal != actual_decimal {
-      result.push_str(&format!(
-        "Expected StatusFlag::Decimal to be {} but received {}\n",
-        expected_decimal, actual_decimal
-      ));
-    }
-    if expected_break != actual_break {
-      result.push_str(&format!(
-        "Expected StatusFlag::Break to be {} but received {}\n",
-        expected_break, actual_break
-      ));
-    }
-    if expected_push != actual_push {
-      result.push_str(&format!(
-        "Expected StatusFlag::Push to be {} but received {}\n",
-        expected_push, actual_push
-      ));
-    }
-    if expected_overflow != actual_overflow {
-      result.push_str(&format!(
-        "Expected StatusFlag::Overflow to be {} but received {}\n",
-        expected_overflow, actual_overflow
-      ));
-    }
-    if expected_negative != actual_negative {
-      result.push_str(&format!(
-        "Expected StatusFlag::Negative to be {} but received {}\n",
-        expected_negative, actual_negative
-      ));
-    }
-
-    if cpu.p != value {
-      panic!(
-        "\nExpected cpu status 0b{:08b} to match 0b{:08b}\n{}",
-        cpu.p, value, result
-      );
-    }
-  }
-
-  macro_rules! register_a {
-    ($name:ident, $a:expr, $p:expr, $text:expr) => {
-      #[test]
-      fn $name() {
-        assert_register_a($text, $a, $p);
-      }
-    };
-  }
-
-  macro_rules! register_x {
-    ($name:ident, $x:expr, $p:expr, $text:expr) => {
-      #[test]
-      fn $name() {
-        assert_register_x($text, $x, $p);
-      }
-    };
-  }
-
-  macro_rules! register_y {
-    ($name:ident, $y:expr, $p:expr, $text:expr) => {
-      #[test]
-      fn $name() {
-        assert_register_y($text, $y, $p);
-      }
-    };
-  }
-
-  // #[allow(unused_macros)]
-  macro_rules! zero_page {
-    ($name:ident, $text:expr, $a:expr, $p:expr) => {
-      #[test]
-      fn $name() {
-        assert_register_a($text, $a, $p);
-      }
-    };
-  }
-
-  macro_rules! status {
-    ($name:ident, $p:expr, $text:expr) => {
-      #[test]
-      fn $name() {
-        let cpu = run_program($text);
-        assert_status(&cpu, $p);
-      }
-    };
-  }
-
-  #[rustfmt::skip]
-  mod imm {
-    use super::*;
-    use StatusFlag::*;
-    const P: u8 = RESET_STATUS_FLAG;
-
-    const C: u8 = Carry as u8;
-    const Z: u8 = Zero as u8;
-    const I: u8 = InterruptDisable as u8;
-    const D: u8 = Decimal as u8;
-    const B: u8 = Break as u8;
-    const T: u8 = Push as u8;
-    const V: u8 = Overflow as u8;
-    const N: u8 = Negative as u8;
-
-    // These test the CPU using a macro, in order to tersely test the system.
-    // For instance this command will run the test:
-    //
-    // `cargo test mos_6502_emulator::test::imm::test_adc1`
-    //
-    //      TestName   Register        Program
-    //             |          | Status |
-    //             |          |     |  |
-    // register_a!(test_adc1, 0x33, P, "lda #$22\nadc #$11",);
-
-    mod adc_basics {
-      use super::*;
-      // This first test shows: 0x22 + 0x11 == 0x33.
-      // P is the default "P" or status register values.
-      register_a!(test_adc1, 0x33, P, "
-        lda #$22
-        adc #$11
-      ");
-      // This add doesn't do anything, but the N, or negative flag is set since the most
-      // significant bit is 1.
-      register_a!(test_adc2, 0xff, P | N, "
-        lda #$FF
-        adc #$00
-      ");
-      // Here we overflow the u8.
-      register_a!(
-        test_adc3,
-        0x00,
-        P
-        | C // For unsigned numbers, the carry bit is flipped, since the result carries over.
-        | Z, // The result is 0x00 (with the carry only in the status register)
-        "
-          lda #$FF  ; 255 signed, or -1 unsigned
-          adc #$01  ;   1 signed, or 1 unsigned
-        "
-      );
-      // This is a similar result as above, but the final resut is not 0.
-      register_a!(test_adc4, 0x01, P | C, "lda #$FF\nadc #$02");
-      // Check that this uses the carry flag.
-      register_a!(test_adc_carry, 0x34, P, "
-        sec      ; Set the carry flag
-        lda #$11 ; Load A with a value
-        adc #$22 ; This should add all three values
-                ; = 0x01 + 0x11 + 0x22
-      ");
-    }
-
-    mod adc_overflow_carry {
-      // This section tests the adc cases from:
-      // http://www.6502.org/tutorials/vflag.html
-      use super::*;
-      register_a!(test_1_1, 0x02, P, "
-        CLC      ; 1 + 1 = 2, returns C = 0
-        LDA #$01 ;            returns V = 0
-        ADC #$01
-      ");
-      // 0b0000_0001
-      // 0x1111_1111
-      // 1_0000_0000
-      register_a!(test_1_neg1, 0x00, P | C | Z, "
-        CLC      ; 1 + -1 = 0, returns C = 1
-        LDA #$01 ;                     V = 0
-        ADC #$FF
-      ");
-
-      // 0b0111_1111
-      // 0b0000_0001
-      // 0b1000_0000
-      register_a!(test_127_1, 0b1000_0000, P | V | N, "
-        CLC      ; 127 + 1 = 128, returns C = 0
-        LDA #$7F ;                        V = 1
-        ADC #$01
-      ");
-
-      // 0x80 + 0xff
-      // 0b1000_0000
-      // 0b1111_1111
-      // 1_0111_1111
-      register_a!(test_neg128_negative_1, 0b0111_1111, P | C | V, "
-        CLC      ; -128 + -1 = -129, returns C = 1
-        LDA #$80 ;                           V = 1
-        ADC #$FF
-      ");
-
-      // 0b0011_1111  a
-      // 0b0100_0000  operand
-      // 0b0000_0001  carry
-      // 0b0000_0000  result
-      register_a!(test_carry, 0b1000_0000, P | V | N, "
-        SEC      ; Note: SEC, not CLC
-        LDA #$3F ; 63 + 64 + 1 = 128, returns V = 1
-        ADC #$40
-      ");
-    }
-
-    mod sbc_overflow_carry {
-      // This section tests the sbc cases from:
-      // http://www.6502.org/tutorials/vflag.html
-      use super::*;
-      // 0b0000_0000   two's comp   0b0000_0000
-      // 0b0000_0001       ->       0b1111_1111
-      //                            0b1111_1111
-      register_a!(test_0_minus_1, negative(1), P | N, "
-        SEC      ; 0 - 1 = -1, returns V = 0
-        LDA #$00
-        SBC #$01
-      ");
-
-      // 0b1000_0000    0b1000_0000
-      // 0b0000_0001 -> 0b1111_1111
-      //              0b1_0111_1111
-      register_a!(test_neg128_minus_1, negative(129), P | C | V, "
-        SEC      ; -128 - 1 = -129, returns V = 1
-        LDA #$80
-        SBC #$01
-      ");
-
-      // 0b0111_1111    0b0111_1111
-      // 0b1111_1111 -> 0b0000_0001
-      //                0b1000_0000
-      register_a!(test_127_minus_neg1, 128, P | V | N, "
-        SEC      ; 127 - -1 = 128, returns V = 1
-        LDA #$7F
-        SBC #$FF
-      ");
-
-      //   0b1100_0000    0b1100_0000
-      // - 0b0100_0000 => 0b1011_1111
-      //                  1_0111_1111
-      register_a!(test_clc, negative(129), P | C | V, "
-        CLC      ; Note: CLC, not SEC
-        LDA #$C0 ; -64 - 64 - 1 = -129, returns V = 1
-        SBC #$40
-      ");
-    }
-
-    mod compare {
-      use super::*;
-      // http://6502.org/tutorials/compare_instructions.html
-      status!(test_cmp_lt, P | N,     "lda #$11\ncmp #$22");
-      status!(test_cmp_gt, P | C,     "lda #$22\ncmp #$11");
-      status!(test_cmp_eq, P | C | Z, "lda #$11\ncmp #$11");
-      status!(test_cpx_lt, P | N,     "ldx #$11\ncpx #$22");
-      status!(test_cpx_gt, P | C,     "ldx #$22\ncpx #$11");
-      status!(test_cpx_eq, P | C | Z, "ldx #$11\ncpx #$11");
-      status!(test_cpy_lt, P | N,     "ldy #$11\ncpy #$22");
-      status!(test_cpy_gt, P | C,     "ldy #$22\ncpy #$11");
-      status!(test_cpy_eq, P | C | Z, "ldy #$11\ncpy #$11");
-    }
-
-    register_a!(test_and, 0b1010_0000, P | N, "
-      lda #%11110000
-      and #%10101010
-    ");
-    register_a!(test_eor, 0b0101_1010, P, "
-      lda #%11110000
-      eor #%10101010
-    ");
-    register_a!(test_ora, 0b1111_1010, P | N, "
-      lda #%11110000
-      ora #%10101010
-    ");
-
-    register_a!(test_lda, 0x22, P, "lda #$22");
-    register_x!(test_ldx, 0x22, P, "ldx #$22");
-    register_y!(test_ldy, 0x22, P, "ldy #$22");
-
-    register_a!(test_nop, 0x00, P, "nop #$22");
-
-    register_a!(test_sbc1, 0x22,        P | C, "
-      sec       ; Always set the carry flag first.
-      lda #$33
-      sbc #$11
-    ");
-    register_a!(test_sbc2, 0x00,        P | Z | C, "
-      sec       ; Always set the carry flag first.
-      lda #$33
-      sbc #$33
-    ");
-    register_a!(test_sbc3, negative(1), P | N, "
-      sec       ; Always set the carry flag first.
-      lda #$33
-      sbc #$34
-    ");
-
-    mod illegal {
-      // register_a!(test_, "alr #$22", 0x22, P);
-      // register_a!(test_, "anc #$22", 0x22, P);
-      // register_a!(test_, "axs #$22", 0x22, P);
-      // register_a!(test_, "arr #$22", 0x22, P);
-      // register_a!(test_, "lax #$22", 0x22, P);
-      // register_a!(test_, "xaa #$22", 0x22, P);
-    }
-  }
-
-  // Run two's complement on a u8.
-  fn negative(n: u8) -> u8 {
-    !n + 1
   }
 }

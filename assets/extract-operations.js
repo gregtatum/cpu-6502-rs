@@ -25,7 +25,7 @@ function extractOpCodes(table) {
     text += `
 // Function: ${documentation}
 // Flags: ${flags.join(' ')}
-fn ${opcode}(cpu: &mut Mos6502Cpu, mode: Mode, extra_cycle: u8) {
+fn ${opcode}(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
     // TODO
     let address = cpu.get_operand_address(mode, extra_cycle);
     cpu.update_zero_and_negative_flag(cpu.a);
