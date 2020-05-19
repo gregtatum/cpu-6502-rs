@@ -200,3 +200,97 @@ mod immediate_mode {
     // register_a!(, "xaa #$22", 0x22, P);
   }
 }
+
+#[rustfmt::skip]
+mod zero_page {
+  use super::*;
+  register_a!(adc_zp, 0x33, P, "
+    lda #$22
+    sta $10
+    lda #$11
+    clc
+    adc $10
+  ");
+  register_a!(adc_zpx, 0x33, P, "
+    ; Load up the zero page.
+    lda #$22
+    sta $12   ; 0x10 + 0x02
+    ; Load up the registers
+    lda #$11
+    ldx #$02
+    ; Do the math
+    clc
+    adc $10,x
+  ");
+  register_a!(and_zp, 0b1010_0000, P | N, "
+    lda #%10101010
+    sta $10
+    lda #%11110000
+    clc
+    and $10
+  ");
+  register_a!(and_zpx, 0b1010_0000, P | N, "
+    ; Load up the zero page.
+    lda #%10101010
+    sta $12   ; 0x10 + 0x02
+    ; Load up the registers
+    lda #%11110000
+    ldx #$02
+    ; Do the math
+    clc
+    and $10,x
+  ");
+  // zero_page!(asl_zp, [0x10, 0x00], "asl_zp");
+  // zero_page!(asl_zpx, [0x10, 0x00], "asl_zpx");
+  // zero_page!(bit_zp, [0x10, 0x00], "bit_zp");
+  // zero_page!(cmp_zp, [0x10, 0x00], "cmp_zp");
+  // zero_page!(cmp_zpx, [0x10, 0x00], "cmp_zpx");
+  // zero_page!(cpx_zp, [0x10, 0x00], "cpx_zp");
+  // zero_page!(cpy_zp, [0x10, 0x00], "cpy_zp");
+  // zero_page!(dcp_zp, [0x10, 0x00], "dcp_zp");
+  // zero_page!(dcp_zpx, [0x10, 0x00], "dcp_zpx");
+  // zero_page!(dec_zp, [0x10, 0x00], "dec_zp");
+  // zero_page!(dec_zpx, [0x10, 0x00], "dec_zpx");
+  // zero_page!(eor_zp, [0x10, 0x00], "eor_zp");
+  // zero_page!(eor_zpx, [0x10, 0x00], "eor_zpx");
+  // zero_page!(inc_zp, [0x10, 0x00], "inc_zp");
+  // zero_page!(inc_zpx, [0x10, 0x00], "inc_zpx");
+  // zero_page!(isc_zp, [0x10, 0x00], "isc_zp");
+  // zero_page!(isc_zpx, [0x10, 0x00], "isc_zpx");
+  // zero_page!(lax_zp, [0x10, 0x00], "lax_zp");
+  // zero_page!(lax_zpy, [0x10, 0x00], "lax_zpy");
+  // zero_page!(lda_zp, [0x10, 0x00], "lda_zp");
+  // zero_page!(lda_zpx, [0x10, 0x00], "lda_zpx");
+  // zero_page!(ldx_zp, [0x10, 0x00], "ldx_zp");
+  // zero_page!(ldx_zpy, [0x10, 0x00], "ldx_zpy");
+  // zero_page!(ldy_zp, [0x10, 0x00], "ldy_zp");
+  // zero_page!(ldy_zpx, [0x10, 0x00], "ldy_zpx");
+  // zero_page!(lsr_zp, [0x10, 0x00], "lsr_zp");
+  // zero_page!(lsr_zpx, [0x10, 0x00], "lsr_zpx");
+  // zero_page!(nop_zp, [0x10, 0x00], "nop_zp");
+  // zero_page!(nop_zpx, [0x10, 0x00], "nop_zpx");
+  // zero_page!(ora_zp, [0x10, 0x00], "ora_zp");
+  // zero_page!(ora_zpx, [0x10, 0x00], "ora_zpx");
+  // zero_page!(rla_zp, [0x10, 0x00], "rla_zp");
+  // zero_page!(rla_zpx, [0x10, 0x00], "rla_zpx");
+  // zero_page!(rol_zp, [0x10, 0x00], "rol_zp");
+  // zero_page!(rol_zpx, [0x10, 0x00], "rol_zpx");
+  // zero_page!(ror_zp, [0x10, 0x00], "ror_zp");
+  // zero_page!(ror_zpx, [0x10, 0x00], "ror_zpx");
+  // zero_page!(rra_zp, [0x10, 0x00], "rra_zp");
+  // zero_page!(rra_zpx, [0x10, 0x00], "rra_zpx");
+  // zero_page!(sax_zp, [0x10, 0x00], "sax_zp");
+  // zero_page!(sax_zpy, [0x10, 0x00], "sax_zpy");
+  // zero_page!(sbc_zp, [0x10, 0x00], "sbc_zp");
+  // zero_page!(sbc_zpx, [0x10, 0x00], "sbc_zpx");
+  // zero_page!(slo_zp, [0x10, 0x00], "slo_zp");
+  // zero_page!(slo_zpx, [0x10, 0x00], "slo_zpx");
+  // zero_page!(sre_zp, [0x10, 0x00], "sre_zp");
+  // zero_page!(sre_zpx, [0x10, 0x00], "sre_zpx");
+  // zero_page!(sta_zp, [0x10, 0x00], "sta_zp");
+  // zero_page!(sta_zpx, [0x10, 0x00], "sta_zpx");
+  // zero_page!(stx_zp, [0x10, 0x00], "stx_zp");
+  // zero_page!(stx_zpy, [0x10, 0x00], "stx_zpy");
+  // zero_page!(sty_zp, [0x10, 0x00], "sty_zp");
+  // zero_page!(sty_zpx, [0x10, 0x00], "sty_zpx");
+}

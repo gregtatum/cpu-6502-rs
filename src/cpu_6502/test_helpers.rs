@@ -185,12 +185,19 @@ macro_rules! register_y {
   };
 }
 
-#[macro_export] // #[allow(unused_macros)]
+#[macro_export]
 macro_rules! zero_page {
-  ($name:ident, $text:expr, $a:expr, $p:expr) => {
+  ($name:ident, [$addr:expr, $expected:expr], $text:expr) => {
     #[test]
     fn $name() {
-      assert_register_a($text, $a, $p);
+      let cpu = run_program($text);
+      let actual = cpu.bus.read_u8($addr);
+      if actual != $expected {
+        panic!(
+          "\n{}\nExpected zero page address {:#x} to contain {:#x} ({:#b}) but it was {:#x} ({:#b})",
+          text, $addr, $expected, $expected, actual, actual
+        );
+      }
     }
   };
 }
