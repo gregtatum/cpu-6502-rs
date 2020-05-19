@@ -8,6 +8,7 @@ pub enum Token {
     Mode(TokenMode),
     U8(u8),
     U16(u16),
+    Label(StringIndex),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -23,6 +24,92 @@ pub enum Character {
 pub enum U8OrU16 {
     U8(u8),
     U16(u16),
+}
+
+pub type StringIndex = usize;
+pub type ByteOffset = usize;
+
+/// This struct is a string table that will hold a unique reference to a string.
+/// This makers it easy to use simple numeric indexes to refer to a string rather
+/// that duplicating a string and worrying about ownership. In addition there
+/// is no duplication of strings.
+///
+/// In addition, it provides a mechanism for labeling the byte address of the label.
+pub struct LabelTable {
+    strings: Vec<String>,
+    addresses: Option<Vec<ByteOffset>>,
+    pub addresses_to_label: Vec<(StringIndex, ByteOffset)>,
+}
+
+impl LabelTable {
+    pub fn new() -> LabelTable {
+        LabelTable {
+            strings: Vec::new(),
+            addresses: None,
+            addresses_to_label: Vec::new(),
+        }
+    }
+
+    pub fn take_string(&mut self, string: String) -> StringIndex {
+        match self.strings.iter().position(|s| *s == string) {
+            Some(index) => index,
+            None => {
+                let index = self.strings.len();
+                self.strings.push(string);
+                index
+            }
+        }
+    }
+
+    pub fn index(&mut self, string: &String) -> StringIndex {
+        match self.strings.iter().position(|s| s == string) {
+            Some(index) => index,
+            None => {
+                let index = self.strings.len();
+                self.strings.push(string.to_string());
+                index
+            }
+        }
+    }
+
+    pub fn string(&self, index: StringIndex) -> Option<&String> {
+        self.strings.get(index)
+    }
+
+    pub fn set_address(&mut self, address: usize, index: StringIndex) {
+        match &self.addresses {
+            Some(addresses) => {
+                debug_assert_eq!(
+                    addresses.len(),
+                    self.strings.len(),
+                    "Expected the StringTable to not changes size with computing addresses"
+                );
+            }
+            None => {
+                let addresses = vec![0; self.strings.len()];
+                self.addresses = Some(addresses);
+            }
+        };
+        match self.addresses {
+            Some(ref mut addresses) => addresses[index] = address,
+            None => panic!("self.addresses not found"),
+        }
+    }
+
+    pub fn get_address(&self, index: StringIndex) -> Result<usize, String> {
+        match self.addresses {
+            Some(ref addresses) => {
+                match addresses.get(index) {
+                    Some(address) => Ok(*address),
+                    None => Err(format!(
+                        "Unable to find the address for the label {}",
+                        self.strings.get(index).unwrap()
+                    )),
+                }
+            },
+            None => panic!("Attempted to look up the byte address of a string, but the addresses were not initialized")
+        }
+    }
 }
 
 fn char_to_enum(character: &char) -> Character {
@@ -128,6 +215,7 @@ pub struct AsmLexer<'a> {
     lines: std::str::Lines<'a>,
     characters: std::iter::Peekable<Chars<'a>>,
     tokens: Vec<Token>,
+    labels: LabelTable,
     row: u64,
     column: u64,
 }
@@ -139,6 +227,7 @@ impl<'a> AsmLexer<'a> {
             characters: IntoIterator::into_iter("".chars()).peekable(),
             lines: IntoIterator::into_iter(text.lines()),
             tokens: Vec::new(),
+            labels: LabelTable::new(),
             column: 1,
             row: 1,
         }
@@ -191,10 +280,13 @@ impl<'a> AsmLexer<'a> {
                             Some(instruction) => {
                                 self.tokens.push(Token::Instruction(instruction.clone()));
                                 self.parse_operand(instruction)?;
-                            },
-                            None => return Err(
-                                format!("Found the word \"{}\", and not an instruction. Labels are not supported as of yet.", word)
-                            ),
+                            }
+                            None => {
+                                self.expect_next_character(':')?;
+                                let label = Token::Label(self.labels.take_string(word));
+                                self.tokens.push(label);
+                                return self.continue_to_end_of_line();
+                            }
                         }
                     }
                     _ => return Err(format!("Unknown next token. {}", character)),
@@ -208,13 +300,39 @@ impl<'a> AsmLexer<'a> {
         self.tokens
     }
 
-    pub fn to_bytes(self) -> Result<Vec<u8>, String> {
+    pub fn to_bytes(mut self) -> Result<Vec<u8>, String> {
+        let mut bytes = self.to_bytes_before_labels()?;
+        for (string_index, byte_offset) in self.labels.addresses_to_label.iter() {
+            let label_value_u16 = self.labels.get_address(*string_index)? as u16;
+            let [low, high] = label_value_u16.to_le_bytes();
+            bytes[*byte_offset] = low;
+            bytes[*byte_offset + 1] = high;
+        }
+        Ok(bytes)
+    }
+
+    fn to_bytes_before_labels(&mut self) -> Result<Vec<u8>, String> {
         let mut bytes: Vec<u8> = Vec::new();
         let mut tokens = self.tokens.iter().peekable();
         loop {
             match tokens.next() {
                 Some(token) => match token {
                     Token::Instruction(instruction) => match tokens.peek() {
+                        Some(Token::Label(string_index)) => {
+                            bytes.push(instruction_mode_to_op_code(
+                                instruction,
+                                &TokenMode::Absolute,
+                            )? as u8);
+
+                            // Go back and fill this label in.
+                            self.labels
+                                .addresses_to_label
+                                .push((*string_index, bytes.len()));
+
+                            // Push on a u16 address which will be filled in later.
+                            bytes.push(0);
+                            bytes.push(0);
+                        }
                         Some(Token::Mode(mode)) => {
                             bytes.push(instruction_mode_to_op_code(instruction, mode)? as u8);
                             tokens.next();
@@ -259,11 +377,11 @@ impl<'a> AsmLexer<'a> {
                                     as u8);
                         }
                     },
+                    Token::Label(string_index) => {
+                        self.labels.set_address(bytes.len(), *string_index);
+                    }
                     token => {
-                        return Err(format!(
-                            "Unexpected token. Expected an instruction {:#x?}",
-                            token
-                        ))
+                        return Err(format!("Unexpected token at the root level: {:#x?}", token))
                     }
                 },
                 None => break,
@@ -379,6 +497,12 @@ impl<'a> AsmLexer<'a> {
                 Some(character) => {
                     match char_to_enum(&character) {
                         Character::Whitespace => continue,
+                        Character::Alpha => {
+                            let word = self.get_word(Some(&character))?;
+                            let label = Token::Label(self.labels.take_string(word));
+                            self.tokens.push(label);
+                            return self.continue_to_end_of_line();
+                        }
                         Character::Value(';') => {
                             return self.ignore_comment_contents();
                         }
@@ -646,6 +770,19 @@ mod test {
                 BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind, 0x34, 0x12,
                 AND_izx, 0xaa, AND_izy, 0xbb, KIL
             ]
+        );
+    }
+
+    #[test]
+    fn test_labels() {
+        assert_program!(
+            "
+                jmp mylabel
+                lda #$11
+                mylabel: ; This is address 0x0005
+                lda #$22
+            ",
+            [JMP_abs, 0x05, 0x00, LDA_imm, 0x11, LDA_imm, 0x22]
         );
     }
 }
