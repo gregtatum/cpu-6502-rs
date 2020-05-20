@@ -285,10 +285,30 @@ impl<'a> AsmLexer<'a> {
                                 self.expect_next_character(':')?;
                                 let label = Token::Label(self.labels.take_string(word));
                                 self.tokens.push(label);
-                                return self.continue_to_end_of_line();
                             }
                         }
                     }
+                    Character::Value('.') => match self.get_word(None)?.as_ref() {
+                        "byte" => loop {
+                            self.skip_whitespace();
+                            let value = self.next_characters_u8()?;
+                            self.tokens.push(Token::U8(value));
+                            if !self.find_comma()? {
+                                // No comma was found, and we skipped to the end of the line.
+                                break;
+                            }
+                        },
+                        "word" => loop {
+                            self.skip_whitespace();
+                            let value = self.next_characters_u16()?;
+                            self.tokens.push(Token::U16(value));
+                            if !self.find_comma()? {
+                                // No comma was found, and we skipped to the end of the line.
+                                break;
+                            }
+                        },
+                        pragma => return Err(format!("Unknown pragma \".{}\"", pragma)),
+                    },
                     _ => return Err(format!("Unknown next token. {}", character)),
                 },
                 None => return Ok(()),
@@ -380,6 +400,12 @@ impl<'a> AsmLexer<'a> {
                     Token::Label(string_index) => {
                         self.labels.set_address(bytes.len(), *string_index);
                     }
+                    Token::U8(value) => bytes.push(*value),
+                    Token::U16(value) => {
+                        let [a, b] = value.to_le_bytes();
+                        bytes.push(a);
+                        bytes.push(b);
+                    }
                     token => {
                         return Err(format!("Unexpected token at the root level: {:#x?}", token))
                     }
@@ -390,13 +416,40 @@ impl<'a> AsmLexer<'a> {
         Ok(bytes)
     }
 
+    /// Attempts to find a comma after a number. Returns true on success, or false
+    /// if the end of the line is reached
+    fn find_comma(&mut self) -> Result<bool, String> {
+        self.skip_whitespace();
+        iter_peek_match!(self.characters, character => {
+            Character::Value(',') => {
+                // Skip past the comma and any whitespace.
+                self.next_character();
+                self.skip_whitespace();
+                // A comma was found!
+                return Ok(true)
+            },
+            Character::Value(';') => {
+                self.continue_to_end_of_line()?;
+            },
+            value => return Err(format!("Unknown character when expecting a comma or semi-colon \"{:?}\"", value))
+        });
+        return Ok(false);
+    }
+
+    fn skip_whitespace(&mut self) {
+        iter_peek_match!(self.characters, character => {
+            Character::Whitespace => {
+                self.next_character();
+            },
+            _ => return
+        });
+    }
+
     fn next_characters_u8(&mut self) -> Result<u8, String> {
         match self.next_character_or_err()? {
             '$' => {
                 // e.g. $33
-                let mut string = String::new();
-                string.push(self.next_character_or_err()?);
-                string.push(self.next_character_or_err()?);
+                let string = self.get_word(None)?;
                 match u8::from_str_radix(&string, 16) {
                     Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
                     Ok(value) => Ok(value),
@@ -404,31 +457,53 @@ impl<'a> AsmLexer<'a> {
             }
             '%' => {
                 // e.g. %11110000
-                let mut string = String::new();
-                for _ in 0..8 {
-                    string.push(self.next_character_or_err()?);
-                }
+                let string = self.get_word(None)?;
                 match u8::from_str_radix(&string, 2) {
                     Err(err) => Err(format!("Unable to parse binary string as number {:?}", err)),
                     Ok(value) => Ok(value),
                 }
             }
-            character => Err(format!("Unexpected character {}", character)),
+            character => {
+                let number = self.get_word(Some(&character))?;
+                match u8::from_str_radix(&number, 10) {
+                    Ok(number) => Ok(number),
+                    Err(_) => Err(format!("Unable to parse as integer \"{}\"", number)),
+                }
+            }
         }
     }
 
     fn next_characters_u16(&mut self) -> Result<u16, String> {
-        let dollar = self.next_character_or_err()?;
-        self.verify_character(dollar, '$')?;
-
-        let mut string = String::new();
-        string.push(self.next_character_or_err()?);
-        string.push(self.next_character_or_err()?);
-        string.push(self.next_character_or_err()?);
-        string.push(self.next_character_or_err()?);
-        match u16::from_str_radix(&string, 16) {
-            Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-            Ok(value) => Ok(value),
+        match self.next_character_or_err()? {
+            '$' => {
+                // e.g. $3344
+                let string = self.get_word(None)?;
+                match u16::from_str_radix(&string, 16) {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(format!(
+                        "Unable to parse hex string as integer \"${}\"",
+                        string
+                    )),
+                }
+            }
+            '%' => {
+                // e.g. %11110000111100000
+                let string = self.get_word(None)?;
+                match u16::from_str_radix(&string, 2) {
+                    Err(err) => Err(format!(
+                        "Unable to parse binary string as number \"%{:?}\"",
+                        err
+                    )),
+                    Ok(value) => Ok(value),
+                }
+            }
+            character => {
+                let number = self.get_word(Some(&character))?;
+                match u16::from_str_radix(&number, 10) {
+                    Ok(number) => Ok(number),
+                    Err(_) => Err(format!("Unable to parse as integer \"{}\"", number)),
+                }
+            }
         }
     }
 
@@ -657,6 +732,8 @@ impl<'a> AsmLexer<'a> {
         }
     }
 
+    /// Run this method when the line is expected to contain nothing except whitespace
+    /// or a comment.
     fn continue_to_end_of_line(&mut self) -> TokenizerResult {
         loop {
             match self.next_character() {
@@ -783,6 +860,43 @@ mod test {
                 lda #$22
             ",
             [JMP_abs, 0x05, 0x00, LDA_imm, 0x11, LDA_imm, 0x22]
+        );
+    }
+
+    #[test]
+    fn test_pragmas() {
+        assert_program!(
+            "
+                             jmp mylabel
+                            .byte $11
+                            .byte $22, $33
+                mylabel:    .word $5544      ; This is address 0x0006
+            ",
+            [JMP_abs, 0x06, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55]
+        );
+    }
+
+    #[test]
+    fn test_numbers() {
+        assert_program!(
+            "
+                .byte 5
+                .byte 255
+                .byte %10101010
+                .byte %10
+                .word $ff
+                .word %1111000011110000
+            ",
+            [
+                0x05,
+                0xff,
+                0b1010_1010,
+                0x2,
+                0xff,
+                0x00,
+                0b11110000,
+                0b11110000
+            ]
         );
     }
 }
