@@ -15,6 +15,7 @@ Other guides:
 
 6520:
   Opcodes with a table: http://www.oxyron.de/html/opcodes02.html
+  Opcodes: http://www.6502.org/tutorials/6502opcodes.html
   V Flag: http://www.6502.org/tutorials/vflag.html
   Programming it: https://skilldrick.github.io/easy6502/#snake
 
