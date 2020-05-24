@@ -508,17 +508,50 @@ impl<'a> AsmLexer<'a> {
     }
 
     fn next_characters_u8_or_u16(&mut self) -> Result<U8OrU16, String> {
-        let word = self.get_word(None)?;
-        match word.len() {
-            2 => match u8::from_str_radix(&word, 16) {
-                Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-                Ok(value) => Ok(U8OrU16::U8(value)),
-            },
-            4 => match u16::from_str_radix(&word, 16) {
-                Err(err) => Err(format!("Unable to parse string as number {:?}", err)),
-                Ok(value) => Ok(U8OrU16::U16(value)),
-            },
-            _ => Err("Unable to extract a number.".to_string()),
+        match self.next_character_or_err()? {
+            '$' => {
+                // e.g. $33
+                let word = self.get_word(None)?;
+                match word.len() {
+                    2 => match u8::from_str_radix(&word, 16) {
+                        Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                        Ok(number) => Ok(U8OrU16::U8(number)),
+                    },
+                    4 => match u16::from_str_radix(&word, 16) {
+                        Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                        Ok(number) => Ok(U8OrU16::U16(number)),
+                    },
+                    _ => Err("This hex number must be either 2 or 4 digits long.".to_string()),
+                }
+            }
+            '%' => {
+                // e.g. %11110000
+                let word = self.get_word(None)?;
+                match word.len() {
+                    8 => match u8::from_str_radix(&word, 2) {
+                        Err(err) => {
+                            Err(format!("Unable to parse binary string as number {:?}", err))
+                        }
+                        Ok(number) => Ok(U8OrU16::U8(number)),
+                    },
+                    16 => match u16::from_str_radix(&word, 2) {
+                        Err(err) => {
+                            Err(format!("Unable to parse binary string as number {:?}", err))
+                        }
+                        Ok(number) => Ok(U8OrU16::U16(number)),
+                    },
+                    _ => Err("This binary number must be either 8 or 16 digits long.".to_string()),
+                }
+            }
+            character => {
+                // TODO - Is it possible to differentiate U8 or U16 here? For now assume
+                // that it's u8.
+                let number = self.get_word(Some(&character))?;
+                match u8::from_str_radix(&number, 10) {
+                    Ok(number) => Ok(U8OrU16::U8(number)),
+                    Err(_) => Err(format!("Unable to parse as integer \"{}\"", number)),
+                }
+            }
         }
     }
 
@@ -567,158 +600,161 @@ impl<'a> AsmLexer<'a> {
     /// ind = ($0000)
     /// rel = $0000 (PC-relative)
     fn parse_operand(&mut self, instruction: Instruction) -> Result<(), String> {
-        loop {
-            match self.next_character() {
-                Some(character) => {
-                    match char_to_enum(&character) {
-                        Character::Whitespace => continue,
-                        Character::Alpha => {
-                            let word = self.get_word(Some(&character))?;
-                            let label = Token::Label(self.labels.take_string(word));
-                            self.tokens.push(label);
-                            return self.continue_to_end_of_line();
-                        }
-                        Character::Value(';') => {
-                            return self.ignore_comment_contents();
-                        }
-                        Character::Value('#') => {
-                            // Immediate mode, match #$00.
-                            self.tokens.push(Token::Mode(TokenMode::Immediate));
-                            let value = self.next_characters_u8()?;
-                            self.tokens.push(Token::U8(value));
-                            return self.continue_to_end_of_line();
-                        }
-                        Character::Value('$') => {
-                            match self.next_characters_u8_or_u16()? {
-                                U8OrU16::U8(value_u8) => {
-                                    // Figure out the mode.
-                                    if self.peek_is_next_character(',') {
-                                        // Skip the ","
-                                        self.next_character_or_err()?;
-                                        let character = self.next_character_or_err()?;
-                                        self.tokens.push(match character {
-                                            'x' => Token::Mode(TokenMode::ZeroPageX),
-                                            'y' => Token::Mode(TokenMode::ZeroPageY),
-                                            _ => {
-                                                return Err(format!(
-                                                    "Unexpected index mode: {}",
-                                                    character
-                                                ))
-                                            }
-                                        });
-                                    } else {
-                                        self.tokens
-                                            .push(Token::Mode(TokenMode::ZeroPageOrRelative));
-                                    }
-
-                                    self.tokens.push(Token::U8(value_u8));
-                                }
-                                U8OrU16::U16(value_u16) => {
-                                    // Figure out the mode.
-                                    if self.peek_is_next_character(',') {
-                                        // Skip the ","
-                                        self.next_character_or_err()?;
-                                        let character = self.next_character_or_err()?;
-                                        self.tokens.push(match character {
-                                            'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
-                                            'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
-                                            _ => {
-                                                return Err(format!(
-                                                    "Unexpected index mode: {}",
-                                                    character
-                                                ))
-                                            }
-                                        });
-                                    } else {
-                                        self.tokens.push(Token::Mode(TokenMode::Absolute));
-                                    }
-
-                                    self.tokens.push(Token::U16(value_u16));
-                                }
-                            }
-                            return self.continue_to_end_of_line();
-                        }
-                        Character::Value('(') => {
-                            // jmp ($1234) ; indirect
-                            // and ($aa,X) ; indirect indexed x
-                            // and ($aa),Y ; indirect indexed y
-                            self.expect_next_character('$')?;
-                            match self.next_characters_u8_or_u16()? {
-                                U8OrU16::U8(value_u8) => {
-                                    // and ($aa,X) ; indirect indexed x
-                                    // and ($aa),Y ; indirect indexed y
-                                    let character = self.next_character_or_err()?;
-                                    match char_to_enum(&character) {
-                                        Character::Value(',') => {
-                                            // and ($aa,X) ; indirect indexed x
-                                            self.expect_next_character('X')?;
-                                            self.expect_next_character(')')?;
-                                            self.tokens.push(Token::Mode(TokenMode::IndirectX));
-                                        }
-                                        Character::Value(')') => {
-                                            // and ($aa),Y ; indirect indexed y
-                                            self.expect_next_character(',')?;
-                                            self.expect_next_character('Y')?;
-                                            self.tokens.push(Token::Mode(TokenMode::IndirectY));
-                                        }
-                                        _ => {
-                                            return Err(format!(
-                                                "Unexpected character {:?}",
-                                                character
-                                            ))
-                                        }
-                                    }
-                                    self.tokens.push(Token::U8(value_u8));
-                                }
-                                U8OrU16::U16(value_u16) => {
-                                    // jmp ($1234) ; indirect
-                                    self.tokens.push(Token::Mode(TokenMode::Indirect));
-                                    self.tokens.push(Token::U16(value_u16));
-                                    self.expect_next_character(')')?;
-                                }
-                            }
-                            return self.continue_to_end_of_line();
-                        }
-                        value => {
-                            return Err(format!(
-                                "Unknown character type when attempting to parse an operand. {:?}",
-                                value
-                            ))
-                        }
-                    }
-                }
-                None => {
-                    return match instruction {
-                        Instruction::DEX => Ok(()),
-                        Instruction::DEY => Ok(()),
-                        Instruction::INX => Ok(()),
-                        Instruction::INY => Ok(()),
-                        Instruction::BRK => Ok(()),
-                        Instruction::RTI => Ok(()),
-                        Instruction::RTS => Ok(()),
-                        Instruction::CLC => Ok(()),
-                        Instruction::SEC => Ok(()),
-                        Instruction::CLD => Ok(()),
-                        Instruction::SED => Ok(()),
-                        Instruction::CLI => Ok(()),
-                        Instruction::SEI => Ok(()),
-                        Instruction::CLV => Ok(()),
-                        Instruction::NOP => Ok(()),
-                        Instruction::TAX => Ok(()),
-                        Instruction::TXA => Ok(()),
-                        Instruction::TAY => Ok(()),
-                        Instruction::TYA => Ok(()),
-                        Instruction::TSX => Ok(()),
-                        Instruction::TXS => Ok(()),
-                        Instruction::PLA => Ok(()),
-                        Instruction::PHA => Ok(()),
-                        Instruction::PLP => Ok(()),
-                        Instruction::PHP => Ok(()),
-                        _ => Err(format!("Instruction {:?} expected an operand", instruction)
-                            .to_string()),
-                    }
-                }
+        iter_peek_match!(self.characters, character => {
+            Character::Whitespace => {
+                self.next_character()
+            },
+            Character::Alpha => {
+                let word = self.get_word(None)?;
+                let label = Token::Label(self.labels.take_string(word));
+                self.tokens.push(label);
+                return self.continue_to_end_of_line();
             }
+            Character::Value(';') => {
+                // Check operand.
+                self.verify_instruction_needs_no_operand(instruction)?;
+                return self.continue_to_end_of_line();
+            }
+            Character::Value('#') => {
+                // Immediate mode, match #$00.
+                self.next_character();
+                self.tokens.push(Token::Mode(TokenMode::Immediate));
+                let value = self.next_characters_u8()?;
+                self.tokens.push(Token::U8(value));
+                return self.continue_to_end_of_line();
+            }
+            Character::Value('$')
+            | Character::Value('%')
+            | Character::Numeric => {
+                match self.next_characters_u8_or_u16()? {
+                    U8OrU16::U8(value_u8) => {
+                        // Figure out the mode.
+                        if self.peek_is_next_character(',') {
+                            // Skip the ","
+                            self.next_character_or_err()?;
+                            let character = self.next_character_or_err()?;
+                            self.tokens.push(match character {
+                                'x' => Token::Mode(TokenMode::ZeroPageX),
+                                'y' => Token::Mode(TokenMode::ZeroPageY),
+                                _ => {
+                                    return Err(format!(
+                                        "Unexpected index mode: {}",
+                                        character
+                                    ))
+                                }
+                            });
+                        } else {
+                            self.tokens
+                                .push(Token::Mode(TokenMode::ZeroPageOrRelative));
+                        }
+
+                        self.tokens.push(Token::U8(value_u8));
+                    }
+                    U8OrU16::U16(value_u16) => {
+                        // Figure out the mode.
+                        if self.peek_is_next_character(',') {
+                            // Skip the ","
+                            self.next_character_or_err()?;
+                            let character = self.next_character_or_err()?;
+                            self.tokens.push(match character {
+                                'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
+                                'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
+                                _ => {
+                                    return Err(format!(
+                                        "Unexpected index mode: {}",
+                                        character
+                                    ))
+                                }
+                            });
+                        } else {
+                            self.tokens.push(Token::Mode(TokenMode::Absolute));
+                        }
+
+                        self.tokens.push(Token::U16(value_u16));
+                    }
+                }
+                return self.continue_to_end_of_line();
+            }
+            Character::Value('(') => {
+                // jmp ($1234) ; indirect
+                // and ($aa,X) ; indirect indexed x
+                // and ($aa),Y ; indirect indexed y
+                self.next_character();
+                match self.next_characters_u8_or_u16()? {
+                    U8OrU16::U8(value_u8) => {
+                        // and ($aa,X) ; indirect indexed x
+                        // and ($aa),Y ; indirect indexed y
+                        let character = self.next_character_or_err()?;
+                        match char_to_enum(&character) {
+                            Character::Value(',') => {
+                                // and ($aa,X) ; indirect indexed x
+                                self.expect_next_character('X')?;
+                                self.expect_next_character(')')?;
+                                self.tokens.push(Token::Mode(TokenMode::IndirectX));
+                            }
+                            Character::Value(')') => {
+                                // and ($aa),Y ; indirect indexed y
+                                self.expect_next_character(',')?;
+                                self.expect_next_character('Y')?;
+                                self.tokens.push(Token::Mode(TokenMode::IndirectY));
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "Unexpected character {:?}",
+                                    character
+                                ))
+                            }
+                        }
+                        self.tokens.push(Token::U8(value_u8));
+                    }
+                    U8OrU16::U16(value_u16) => {
+                        // jmp ($1234) ; indirect
+                        self.tokens.push(Token::Mode(TokenMode::Indirect));
+                        self.tokens.push(Token::U16(value_u16));
+                        self.expect_next_character(')')?;
+                    }
+                }
+                return self.continue_to_end_of_line();
+            }
+            value => {
+                return Err(format!(
+                    "Unknown character type when attempting to parse an operand. {:?}",
+                    value
+                ))
+            }
+        });
+        self.verify_instruction_needs_no_operand(instruction)
+    }
+
+    fn verify_instruction_needs_no_operand(&self, instruction: Instruction) -> Result<(), String> {
+        match instruction {
+            Instruction::DEX => Ok(()),
+            Instruction::DEY => Ok(()),
+            Instruction::INX => Ok(()),
+            Instruction::INY => Ok(()),
+            Instruction::BRK => Ok(()),
+            Instruction::RTI => Ok(()),
+            Instruction::RTS => Ok(()),
+            Instruction::CLC => Ok(()),
+            Instruction::SEC => Ok(()),
+            Instruction::CLD => Ok(()),
+            Instruction::SED => Ok(()),
+            Instruction::CLI => Ok(()),
+            Instruction::SEI => Ok(()),
+            Instruction::CLV => Ok(()),
+            Instruction::NOP => Ok(()),
+            Instruction::TAX => Ok(()),
+            Instruction::TXA => Ok(()),
+            Instruction::TAY => Ok(()),
+            Instruction::TYA => Ok(()),
+            Instruction::TSX => Ok(()),
+            Instruction::TXS => Ok(()),
+            Instruction::PLA => Ok(()),
+            Instruction::PHA => Ok(()),
+            Instruction::PLP => Ok(()),
+            Instruction::PHP => Ok(()),
+            Instruction::KIL => Ok(()),
+            _ => Err(format!("Instruction {:?} expected an operand", instruction).to_string()),
         }
     }
 
@@ -847,6 +883,45 @@ mod test {
                 BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind, 0x34, 0x12,
                 AND_izx, 0xaa, AND_izy, 0xbb, KIL
             ]
+        );
+    }
+
+    #[test]
+    fn test_all_modes_binary() {
+        assert_program!(
+            "
+                lda #%11110000    ; immediate
+
+                ora %1111000101010101   ; absolute
+                asl %1111001001010101,x ; absolute indexed X
+                eor %1111001101010101,y ; absolute indexed Y
+
+                bpl %11110100     ; relative
+                sty %11110101     ; zero page
+                sta %11110110,x   ; zero page indexed X
+                stx %11110111,y   ; zero page indexed Y
+
+                jmp (%1111100001010101) ; indirect
+                and (%11111001,X) ; indirect indexed x
+                and (%11111010),Y ; indirect indexed y
+            ",
+            [
+                LDA_imm, 0b11110000, ORA_abs, 0b01010101, 0b11110001, ASL_abx, 0b01010101,
+                0b11110010, EOR_aby, 0b01010101, 0b11110011, BPL_rel, 0b11110100, STY_zp,
+                0b11110101, STA_zpx, 0b11110110, STX_zpy, 0b11110111, JMP_ind, 0b01010101,
+                0b11111000, AND_izx, 0b11111001, AND_izy, 0b11111010
+            ]
+        );
+    }
+
+    #[test]
+    fn test_u8_digits() {
+        assert_program!(
+            "
+                lda #123    ; immediate
+                bpl 234     ; relative
+            ",
+            [LDA_imm, 123, BPL_rel, 234]
         );
     }
 
