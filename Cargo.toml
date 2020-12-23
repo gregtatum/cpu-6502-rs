@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Greg Tatum <tatum.creative@gmail.com>"]
 edition = "2018"
 
+[[bin]]
+name = "cpu-visualizer"
 
 [dependencies]
 colored = "1.9"
+tui = "0.13"
+termion = "1.5"
