@@ -1,4 +1,4 @@
-use crate::bus::Bus;
+use crate::bus::SharedBus;
 use crate::constants::{memory_range, InterruptVectors};
 use crate::opcodes::{Mode, OpCode};
 mod opcodes_illegal;
@@ -51,6 +51,10 @@ pub enum ExtraCycle {
   IfTaken,
 }
 
+pub enum Interrupt {
+  IRQ,
+}
+
 /// This struct implements the CPU for the NES, the MOS Technology 6502.
 ///
 /// http://www.6502.org/
@@ -58,7 +62,7 @@ pub enum ExtraCycle {
 /// http://wiki.nesdev.com/w/index.php/CPU
 pub struct Cpu6502 {
   // The bus is what holds all the memory access for the program.
-  bus: Bus,
+  bus: SharedBus,
   // "A" register - The accumulator. Typical results of operations are stored here.
   // In combination with the status register, supports using the status register for
   // carrying, overflow detection, and so on.
@@ -189,10 +193,10 @@ macro_rules! match_opcode {
 }
 
 impl Cpu6502 {
-  fn new(bus: Bus) -> Cpu6502 {
+  pub fn new(bus: SharedBus) -> Cpu6502 {
     // Go ahead and read the first instruction from the reset vector. If the reset
     // vector is set again, the program will end.
-    let pc = bus.read_u16(InterruptVectors::ResetVector as u16);
+    let pc = bus.borrow().read_u16(InterruptVectors::ResetVector as u16);
 
     Cpu6502 {
       bus,
@@ -213,13 +217,13 @@ impl Cpu6502 {
 
   /// Read the PC without incrementing.
   fn peek_u8(&mut self) -> u8 {
-    self.bus.read_u8(self.pc)
+    self.bus.borrow().read_u8(self.pc)
   }
 
   /// Increment the program counter and read the next u8 value following
   /// the current pc.
   fn next_u8(&mut self) -> u8 {
-    let value = self.bus.read_u8(self.pc);
+    let value = self.bus.borrow().read_u8(self.pc);
     self.pc += 1;
     value
   }
@@ -227,7 +231,7 @@ impl Cpu6502 {
   /// Increment the program counter and read the next u16 value following
   /// the current pc.
   fn next_u16(&mut self) -> u16 {
-    let value = self.bus.read_u16(self.pc);
+    let value = self.bus.borrow().read_u16(self.pc);
     self.pc += 2;
     value
   }
@@ -306,7 +310,7 @@ impl Cpu6502 {
       // for the operation.
       Mode::Indirect => {
         let address = self.next_u16();
-        return self.bus.read_u16(address);
+        return self.bus.borrow().read_u16(address);
       }
       Mode::IndirectX => self.next_u8().wrapping_add(self.x) as u16,
       Mode::IndirectY => self.next_u8().wrapping_add(self.y) as u16,
@@ -352,7 +356,7 @@ impl Cpu6502 {
 
   fn get_operand(&mut self, mode: Mode, extra_cycle: u8) -> (u16, u8) {
     let address = self.get_operand_address(mode, extra_cycle);
-    let value = self.bus.read_u8(address);
+    let value = self.bus.borrow().read_u8(address);
     (address, value)
   }
 
@@ -691,7 +695,7 @@ impl Cpu6502 {
     // The stack page is hard coded.
     let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
     // The stack points to the next available memory.
-    self.bus.set_u8(address, value);
+    self.bus.borrow_mut().set_u8(address, value);
     // Grow down only after setting the memory.
     self.s = self.s.wrapping_sub(1);
   }
@@ -703,7 +707,7 @@ impl Cpu6502 {
     self.s = self.s.wrapping_add(1);
     // Now read out the memory that is being pulled.
     let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
-    self.bus.read_u8(address)
+    self.bus.borrow().read_u8(address)
   }
 
   /// This function implements pushing to the stack.
@@ -711,7 +715,7 @@ impl Cpu6502 {
   fn push_stack_u16(&mut self, value: u16) {
     let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
     // The stack points to the next available memory.
-    self.bus.set_u16(address, value);
+    self.bus.borrow_mut().set_u16(address, value);
     // Grow down only after setting the memory.
     self.s = self.s.wrapping_sub(2);
   }
@@ -724,6 +728,14 @@ impl Cpu6502 {
     // Now read out the memory that is being pulled.
     let stack_page = 0x01;
     let address = u16::from_le_bytes([self.s, stack_page]);
-    self.bus.read_u16(address)
+    self.bus.borrow().read_u16(address)
+  }
+
+  fn handle_irq(&mut self) {
+    self.push_stack_u16(self.pc);
+    self.push_stack_u8(self.p);
+    self.pc = InterruptVectors::ResetVector as u16;
+    self.set_status_flag(StatusFlag::InterruptDisable, true);
+    self.cycles += 7;
   }
 }

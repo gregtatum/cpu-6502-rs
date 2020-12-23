@@ -14,7 +14,7 @@ pub fn lda(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Flags:
 pub fn sta(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, _operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.bus.set_u8(address, cpu.a);
+  cpu.bus.borrow_mut().set_u8(address, cpu.a);
 }
 
 /// Load register X with the value
@@ -31,7 +31,7 @@ pub fn ldx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Flags:
 pub fn stx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, _operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.bus.set_u8(address, cpu.x);
+  cpu.bus.borrow_mut().set_u8(address, cpu.x);
 }
 
 /// Load register Y with the value
@@ -48,7 +48,7 @@ pub fn ldy(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Flags:
 pub fn sty(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, _operand) = cpu.get_operand(mode, extra_cycle);
-  cpu.bus.set_u8(address, cpu.y);
+  cpu.bus.borrow_mut().set_u8(address, cpu.y);
 }
 
 /// Transfer A to X

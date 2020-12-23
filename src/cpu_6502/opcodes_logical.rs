@@ -120,7 +120,7 @@ pub fn dec(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
   let result = operand.wrapping_sub(1);
   cpu.update_zero_and_negative_flag(result);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }
 
 /// Decrement X
@@ -146,7 +146,7 @@ pub fn inc(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
   let result = operand.wrapping_add(1);
   cpu.update_zero_and_negative_flag(result);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }
 
 /// Increment X
@@ -174,7 +174,7 @@ pub fn asl(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(result);
   // The Carry flag contains the bit that was shifted out:
   cpu.set_status_flag(StatusFlag::Carry, operand & 0b1000_0000 != 0);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }
 
 /// Rotate left
@@ -186,7 +186,7 @@ pub fn rol(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(result);
   // The Carry flag contains the bit that was shifted out:
   cpu.set_status_flag(StatusFlag::Carry, operand & 0b1000_0000 != 0);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }
 
 /// Logical shift right
@@ -198,7 +198,7 @@ pub fn lsr(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(result);
   // The Carry flag contains the bit that was shifted out:
   cpu.set_status_flag(StatusFlag::Carry, operand & 0b0000_0001 != 0);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }
 
 /// Rotate right
@@ -217,5 +217,5 @@ pub fn ror(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   cpu.update_zero_and_negative_flag(result);
   // The Carry flag contains the bit that was shifted out:
   cpu.set_status_flag(StatusFlag::Carry, operand & 0b0000_0001 != 0);
-  cpu.bus.set_u8(address, result);
+  cpu.bus.borrow_mut().set_u8(address, result);
 }

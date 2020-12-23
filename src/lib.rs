@@ -5,4 +5,6 @@ pub mod asm;
 pub mod bus;
 pub mod constants;
 pub mod cpu_6502;
+pub mod emulator;
 pub mod opcodes;
+pub mod ppu;

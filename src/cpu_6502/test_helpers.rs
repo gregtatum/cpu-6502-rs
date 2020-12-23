@@ -1,6 +1,7 @@
 #![macro_use]
 
 use crate::asm::AsmLexer;
+use crate::bus::Bus;
 use crate::cpu_6502::*;
 
 pub const P: u8 = RESET_STATUS_FLAG;
@@ -21,10 +22,8 @@ pub fn run_program(text: &str) -> Cpu6502 {
       let mut program = lexer.to_bytes().unwrap();
       program.push(OpCode::KIL as u8);
       let mut cpu = Cpu6502::new({
-        let mut bus = Bus::new();
-
-        // This will load the value into the accu
-        bus.load_program(&program);
+        let bus = Bus::new_shared_bus();
+        bus.borrow_mut().load_program(&program);
         bus
       });
 

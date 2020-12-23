@@ -6,7 +6,7 @@ pub fn slo(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
   let (address, operand) = cpu.get_operand(mode, extra_cycle);
   let result_u16 = operand as u16 * 2;
   let result_u8 = result_u16 as u8;
-  cpu.bus.set_u8(address, result_u8);
+  cpu.bus.borrow_mut().set_u8(address, result_u8);
   cpu.a = cpu.a | result_u8;
   cpu.update_zero_and_negative_flag(result_u8);
   cpu.update_carry_flag(result_u16);
