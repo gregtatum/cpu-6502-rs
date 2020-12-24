@@ -1,4 +1,7 @@
-use crate::opcodes::{instruction_mode_to_op_code, match_instruction, Instruction, TokenMode};
+use crate::{
+    constants::memory_range,
+    opcodes::{instruction_mode_to_op_code, match_instruction, Instruction, TokenMode},
+};
 use colored::*;
 use std::str::Chars;
 
@@ -8,7 +11,8 @@ pub enum Token {
     Mode(TokenMode),
     U8(u8),
     U16(u16),
-    Label(StringIndex),
+    LabelDefinition(StringIndex),
+    LabelOperand(StringIndex),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,11 +34,11 @@ pub type StringIndex = usize;
 pub type ByteOffset = usize;
 
 /// This struct is a string table that will hold a unique reference to a string.
-/// This makers it easy to use simple numeric indexes to refer to a string rather
-/// that duplicating a string and worrying about ownership. In addition there
+/// This makes it easy to use simple numeric indexes to refer to a string rather
+/// that duplicating a string and worrying about ownership. There
 /// is no duplication of strings.
 ///
-/// In addition, it provides a mechanism for labeling the byte address of the label.
+/// It provides a mechanism for labeling the byte address of the label.
 pub struct LabelTable {
     strings: Vec<String>,
     addresses: Option<Vec<ByteOffset>>,
@@ -283,7 +287,7 @@ impl<'a> AsmLexer<'a> {
                             }
                             None => {
                                 self.expect_next_character(':')?;
-                                let label = Token::Label(self.labels.take_string(word));
+                                let label = Token::LabelDefinition(self.labels.take_string(word));
                                 self.tokens.push(label);
                             }
                         }
@@ -323,7 +327,8 @@ impl<'a> AsmLexer<'a> {
     pub fn to_bytes(mut self) -> Result<Vec<u8>, String> {
         let mut bytes = self.to_bytes_before_labels()?;
         for (string_index, byte_offset) in self.labels.addresses_to_label.iter() {
-            let label_value_u16 = self.labels.get_address(*string_index)? as u16;
+            let label_value_u16 =
+                self.labels.get_address(*string_index)? as u16 + memory_range::CARTRIDGE_SPACE.min;
             let [low, high] = label_value_u16.to_le_bytes();
             bytes[*byte_offset] = low;
             bytes[*byte_offset + 1] = high;
@@ -338,7 +343,7 @@ impl<'a> AsmLexer<'a> {
             match tokens.next() {
                 Some(token) => match token {
                     Token::Instruction(instruction) => match tokens.peek() {
-                        Some(Token::Label(string_index)) => {
+                        Some(Token::LabelOperand(string_index)) => {
                             bytes.push(instruction_mode_to_op_code(
                                 instruction,
                                 &TokenMode::Absolute,
@@ -352,6 +357,7 @@ impl<'a> AsmLexer<'a> {
                             // Push on a u16 address which will be filled in later.
                             bytes.push(0);
                             bytes.push(0);
+                            tokens.next();
                         }
                         Some(Token::Mode(mode)) => {
                             bytes.push(instruction_mode_to_op_code(instruction, mode)? as u8);
@@ -397,8 +403,14 @@ impl<'a> AsmLexer<'a> {
                                     as u8);
                         }
                     },
-                    Token::Label(string_index) => {
+                    Token::LabelDefinition(string_index) => {
                         self.labels.set_address(bytes.len(), *string_index);
+                    }
+                    Token::LabelOperand(string_index) => {
+                        return Err(format!(
+                            "Unexpected LabelOperand operand found. Operands are assumed to follow instructions: {:#x?}",
+                            self.labels.strings.get(*string_index).unwrap()
+                        ));
                     }
                     Token::U8(value) => bytes.push(*value),
                     Token::U16(value) => {
@@ -606,7 +618,7 @@ impl<'a> AsmLexer<'a> {
             },
             Character::Alpha => {
                 let word = self.get_word(None)?;
-                let label = Token::Label(self.labels.take_string(word));
+                let label = Token::LabelOperand(self.labels.take_string(word));
                 self.tokens.push(label);
                 return self.continue_to_end_of_line();
             }

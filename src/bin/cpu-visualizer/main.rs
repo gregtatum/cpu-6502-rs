@@ -8,7 +8,7 @@ use nes::{
     cpu_6502::Cpu6502,
     opcodes::{mode_to_operand_count, Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
-use std::{collections::VecDeque, error::Error, io};
+use std::{collections::VecDeque, env, error::Error, io};
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
@@ -20,8 +20,12 @@ use tui::{
 };
 
 const BORDER_COLOR: Color = Color::Rgb(150, 150, 150);
+const CYAN: Color = Color::Rgb(0, 200, 200);
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Load the CPU first, as this can exit the process.
+    let mut cpu = load_cpu();
+
     // Terminal initialization
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
@@ -33,7 +37,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let registers_rect_width = 40;
     let instructions_rect_width = 40;
-    let mut cpu = load_cpu();
     let mut last_drawn_tick_count = u64::MAX;
     let mut executed_instructions = VecDeque::new();
 
@@ -55,14 +58,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let col3 = frame_rect.width;
                 let col2 = col3 - registers_rect_width;
                 let col1 = col2 - instructions_rect_width;
+
                 let main_rect_height = frame_rect.height;
                 let main_rect_inner_height = main_rect_height - 2;
+
                 let ram_rect_width =
                     frame_rect.width - registers_rect_width - instructions_rect_width;
                 let ram_rect_inner_width = ram_rect_width - 2;
                 let ram_rect = Rect::new(col0, 0, ram_rect_width, main_rect_height);
+
                 let instructions_rect =
                     Rect::new(col1, 0, instructions_rect_width, main_rect_height);
+
                 let registers_rect = Rect::new(col2, 0, registers_rect_width, main_rect_height);
 
                 let block =
@@ -240,19 +247,9 @@ fn get_instructions_text<'a>(
         spans_list.push(spans.clone());
     }
 
-    // A little utility to make it easy to read from the bus and increment the
-    // program counter.
-    let mut read = || {
-        let value = bus.read_u8(pc);
-        pc += 1;
-        value
-    };
-
     for i in 0..next_instructructions_len {
         let mut parts = vec![];
-        let operation = read();
-        let opcode = OPCODE_STRING_TABLE[operation as usize];
-        let mode = ADDRESSING_MODE_TABLE[operation as usize];
+
         let base_style = {
             if i == 0 {
                 Style::default().add_modifier(Modifier::BOLD)
@@ -260,6 +257,17 @@ fn get_instructions_text<'a>(
                 Style::default()
             }
         };
+
+        parts.push(Span::styled(
+            format!("${:02x} ", pc.clone()),
+            base_style.fg(CYAN),
+        ));
+
+        let operation = bus.read_u8(pc);
+        pc += 1;
+
+        let opcode = OPCODE_STRING_TABLE[operation as usize];
+        let mode = ADDRESSING_MODE_TABLE[operation as usize];
         parts.push(Span::styled(opcode, base_style.fg(Color::Yellow)));
 
         let operand_count = mode_to_operand_count(mode);
@@ -267,12 +275,19 @@ fn get_instructions_text<'a>(
         // Unroll the loop into 2 if statements.
         if operand_count == 1 {
             parts.push(Span::styled(
-                format!(" {:02x}", read()),
+                format!(" ${:02x}", {
+                    let value = bus.read_u8(pc);
+                    pc += 1;
+                    value
+                }),
                 base_style.fg(Color::White),
             ));
         } else if operand_count == 2 {
+            let a = bus.read_u8(pc);
+            let b = bus.read_u8(pc + 1);
+            pc += 2;
             parts.push(Span::styled(
-                format!(" {:02x} {:02x}\n", read(), read()),
+                format!(" ${:02x}{:02x}\n", b, a),
                 base_style.fg(Color::White),
             ));
         }
@@ -303,7 +318,7 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     let mut spans = vec![];
     let bus = cpu.bus.borrow();
     let style = Style::default();
-    let cyan = style.fg(Color::Rgb(0, 200, 200));
+    let cyan = style.fg(CYAN);
     let dim_white = style.fg(Color::Rgb(200, 200, 200));
 
     // Decide how many columns to make.
@@ -357,40 +372,22 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
 }
 
 fn load_cpu() -> Cpu6502 {
-    let mut lexer = AsmLexer::new(
-        "
-            sec        ; Set the carry flag
-            lda #$11   ; Load A with a value
-            adc #$22   ; This should add all three values
-                       ; = 0x01 + 0x11 + 0x22 = 0x34
-            clc        ; Clear the carry bit
+    let args: Vec<String> = env::args().collect();
+    let filename = match args.get(1) {
+        Some(f) => f,
+        None => {
+            eprintln!(
+                "The CPU visualizer expects the first argument to be a path to a raw .asm file."
+            );
+            eprintln!(
+                "cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/add-with-carry.asm"
+            );
+            std::process::exit(1);
+        }
+    };
 
-            adc #$01   ; Add to the A register
-            inx        ; Increase the value of X in the register
-            sta $00,x  ;
-
-            adc #$01   ; Add to the A register
-            inx        ; Increase the value of X in the register
-            sta $00,x  ;
-
-            adc #$01   ; Add to the A register
-            inx        ; Increase the value of X in the register
-            sta $00,x  ;
-
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-            clc        ;
-        ",
-    );
+    let contents = std::fs::read_to_string(filename).unwrap();
+    let mut lexer = AsmLexer::new(&contents);
 
     match lexer.parse() {
         Ok(_) => {

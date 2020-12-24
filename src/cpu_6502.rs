@@ -392,6 +392,7 @@ impl Cpu6502 {
     /// instructions, and false if a KIL operation was encountered.
     pub fn tick(&mut self) -> bool {
         self.tick_count += 1;
+        self.cycles = 0;
         let opcode = self.next_u8();
 
         if opcode == OpCode::KIL as u8 {
