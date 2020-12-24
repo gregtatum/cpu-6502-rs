@@ -980,17 +980,3 @@ pub const OPCODE_STRING_TABLE: [&'static str; 256] = [
     "nop", "sbc", "cpx", "sbc", "inc", "isc", "beq", "sbc", "kil", "isc", "nop", "sbc", "inc",
     "isc", "sed", "sbc", "nop", "isc", "nop", "sbc", "inc", "isc",
 ];
-
-pub fn mode_to_operand_count(mode: Mode) -> u8 {
-    match mode {
-        Mode::Absolute | Mode::AbsoluteIndexedX | Mode::AbsoluteIndexedY | Mode::Indirect => 2,
-        Mode::ZeroPage
-        | Mode::Relative
-        | Mode::ZeroPageX
-        | Mode::ZeroPageY
-        | Mode::Immediate
-        | Mode::IndirectX
-        | Mode::IndirectY => 1,
-        Mode::Implied | Mode::None => 0,
-    }
-}

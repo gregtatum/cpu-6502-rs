@@ -6,10 +6,12 @@ use nes::{
     asm::{AddressToLabel, AsmLexer, BytesLabels},
     bus::Bus,
     cpu_6502::Cpu6502,
-    opcodes::{mode_to_operand_count, Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
+    opcodes::{Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
 use std::{collections::VecDeque, env, error::Error, io};
-use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
+use termion::{
+    event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen,
+};
 use tui::{
     backend::TermionBackend,
     layout::{Alignment, Rect},
@@ -22,6 +24,8 @@ use tui::{
 const BORDER_COLOR: Color = Color::Rgb(150, 150, 150);
 const CYAN: Color = Color::Rgb(0, 200, 200);
 const MAGENTA: Color = Color::Rgb(200, 100, 200);
+const GRAY: Color = Color::Rgb(170, 170, 170);
+const DIM_WHITE: Color = Color::Rgb(200, 200, 200);
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Load the CPU first, as this can exit the process.
@@ -266,14 +270,21 @@ fn get_instructions_text<'a>(
         //   $4027 clc
         match address_to_label.get(&pc) {
             Some(pc_label) => {
-                let mut span = Span::styled(format!("{}: ", pc_label), base_style.fg(MAGENTA));
-                spans_list.push(Spans::from(span.clone()));
+                let mut span =
+                    Span::styled(format!("{}: ", pc_label), base_style.fg(MAGENTA));
 
+                // Is this selected?
                 if i == 0 {
                     // Remember this for in the list of executed instructions.
-                    span.style = base_style.fg(Color::Rgb(170, 170, 170));
-                    executed_instructions.push_front(Spans::from(span));
+                    let mut dim_span = span.clone();
+                    dim_span.style = base_style.fg(GRAY);
+                    executed_instructions.push_front(Spans::from(dim_span));
+
+                    // Bold the current label too.
+                    span.style = span.style.clone().add_modifier(Modifier::BOLD);
                 }
+
+                spans_list.push(Spans::from(span));
             }
             None => {}
         };
@@ -293,39 +304,115 @@ fn get_instructions_text<'a>(
         let mode = ADDRESSING_MODE_TABLE[operation as usize];
         parts.push(Span::styled(opcode, base_style.fg(Color::Yellow)));
 
-        let operand_count = mode_to_operand_count(mode);
+        match mode {
+            Mode::Absolute
+            | Mode::AbsoluteIndexedX
+            | Mode::AbsoluteIndexedY
+            | Mode::Indirect => {
+                let a = bus.read_u8(pc);
+                let b = bus.read_u8(pc + 1);
+                pc += 2;
+                let value = u16::from_le_bytes([a, b]);
 
-        // Unroll the loop into 2 if statements.
-        if operand_count == 1 {
-            parts.push(Span::styled(
-                format!(" ${:02x}", {
-                    let value = bus.read_u8(pc);
-                    pc += 1;
-                    value
-                }),
-                base_style.fg(Color::White),
-            ));
-        } else if operand_count == 2 {
-            let a = bus.read_u8(pc);
-            let b = bus.read_u8(pc + 1);
-            pc += 2;
-            parts.push(Span::styled(
-                format!(" ${:02x}{:02x}\n", b, a),
-                base_style.fg(Color::White),
-            ));
-        }
+                let mut address_style = base_style.fg(Color::White);
 
-        if mode != Mode::None {
-            parts.push(Span::styled(
-                format!(" {:?}", mode),
-                base_style.fg(Color::Yellow),
-            ));
+                //   $4023 jmp section2 $4029
+                //             ^^^^^^^^
+                match address_to_label.get(&value) {
+                    Some(label) => {
+                        parts.push(Span::styled(
+                            format!(" {}", label),
+                            base_style.fg(MAGENTA),
+                        ));
+                        // Dim out the address.
+                        address_style = base_style.fg(GRAY);
+                    }
+                    None => {}
+                }
+
+                if mode == Mode::Indirect {
+                    //   $4023 jmp ($4029)
+                    //             ^
+                    parts.push(Span::styled("(", base_style.fg(Color::White)));
+                }
+
+                //   $4023 jmp section2 $4029
+                //                      ^^^^^
+                //   $4023 jmp $4029
+                //             ^^^^^
+                parts.push(Span::styled(format!(" ${:04x}\n", value), address_style));
+
+                // Handle indexed modes.
+                if mode == Mode::AbsoluteIndexedX {
+                    //   $4023 jmp $4029,X
+                    //                  ^^
+                    parts.push(Span::styled(",X", base_style.fg(Color::White)));
+                }
+                if mode == Mode::AbsoluteIndexedX {
+                    //   $4023 jmp $4029,Y
+                    //                  ^^
+                    parts.push(Span::styled(",Y", base_style.fg(Color::White)));
+                }
+
+                if mode == Mode::Indirect {
+                    //   $4023 jmp ($4029)
+                    //                   ^
+                    parts.push(Span::styled(")", base_style.fg(Color::White)));
+                }
+            }
+            Mode::ZeroPage
+            | Mode::Relative
+            | Mode::ZeroPageX
+            | Mode::ZeroPageY
+            | Mode::Immediate
+            | Mode::IndirectX
+            | Mode::IndirectY => {
+                let a = bus.read_u8(pc);
+                let b = bus.read_u8(pc + 1);
+                pc += 2;
+
+                if mode == Mode::IndirectX || mode == Mode::IndirectY {
+                    //  $4023 sta ($20,X)
+                    //            ^
+                    parts.push(Span::styled("(", base_style.fg(Color::White)));
+                }
+
+                //   $4023 sta $10,Y
+                //              ^^
+                parts.push(Span::styled(
+                    format!(" ${:02x}{:02x}\n", b, a),
+                    base_style.fg(Color::White),
+                ));
+
+                // Handle indexed modes.
+                if mode == Mode::ZeroPageX {
+                    //   $4023 sta $49,X
+                    //                ^^
+                    parts.push(Span::styled(",X", base_style.fg(Color::White)));
+                }
+                if mode == Mode::ZeroPageY {
+                    //   $4023 sta $49,Y
+                    //                ^^
+                    parts.push(Span::styled(",Y", base_style.fg(Color::White)));
+                }
+                if mode == Mode::IndirectX {
+                    //  $4023 sta ($20,X)
+                    //                ^^^
+                    parts.push(Span::styled(",X)", base_style.fg(Color::White)));
+                }
+                if mode == Mode::IndirectY {
+                    //  $4023 sta ($20),Y
+                    //                ^^^
+                    parts.push(Span::styled("),Y", base_style.fg(Color::White)));
+                }
+            }
+            Mode::Implied | Mode::None => {}
         }
 
         if i == 0 {
             let mut span_dimmed = parts.clone();
             for span in span_dimmed.iter_mut() {
-                span.style = base_style.fg(Color::Rgb(170, 170, 170));
+                span.style = base_style.fg(GRAY);
             }
             // Remember this instruction for the next tick.
             executed_instructions.push_front(Spans::from(span_dimmed));
@@ -342,7 +429,7 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     let bus = cpu.bus.borrow();
     let style = Style::default();
     let cyan = style.fg(CYAN);
-    let dim_white = style.fg(Color::Rgb(200, 200, 200));
+    let dim_white = style.fg(DIM_WHITE);
 
     // Decide how many columns to make.
     let col_width = "$00 0011 2233 4455 6677 8899 aabb ccdd eeff ".len();
