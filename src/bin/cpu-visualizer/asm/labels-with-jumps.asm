@@ -7,17 +7,12 @@ section1:
   clc
   clc
   clc
-  clc
-  clc
-  clc
 
 section2:
   sec
   sec
   sec
-  sec
   jmp section1
-  sec
   sec
   sec
   sec

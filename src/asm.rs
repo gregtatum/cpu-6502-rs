@@ -3,7 +3,7 @@ use crate::{
     opcodes::{instruction_mode_to_op_code, match_instruction, Instruction, TokenMode},
 };
 use colored::*;
-use std::str::Chars;
+use std::{collections::HashMap, str::Chars};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -214,6 +214,13 @@ impl ParseError {
     }
 }
 
+pub type AddressToLabel = HashMap<u16, String>;
+
+pub struct BytesLabels {
+    pub bytes: Vec<u8>,
+    pub address_to_label: AddressToLabel,
+}
+
 pub struct AsmLexer<'a> {
     text: &'a str,
     lines: std::str::Lines<'a>,
@@ -324,16 +331,49 @@ impl<'a> AsmLexer<'a> {
         self.tokens
     }
 
-    pub fn to_bytes(mut self) -> Result<Vec<u8>, String> {
+    pub fn to_bytes(mut self) -> Result<BytesLabels, String> {
         let mut bytes = self.to_bytes_before_labels()?;
-        for (string_index, byte_offset) in self.labels.addresses_to_label.iter() {
+
+        // Consume self to move the data we still care about, at the end, the rest
+        // of the data will be dropped.
+        let AsmLexer { mut labels, .. } = self;
+
+        // Fill in the proper addresses for the labels. The code will be placed at
+        // memory_range::CARTRIDGE_SPACE.min when placed into the emulator.
+        for (string_index, byte_offset) in labels.addresses_to_label.iter() {
             let label_value_u16 =
-                self.labels.get_address(*string_index)? as u16 + memory_range::CARTRIDGE_SPACE.min;
+                labels.get_address(*string_index)? as u16 + memory_range::CARTRIDGE_SPACE.min;
             let [low, high] = label_value_u16.to_le_bytes();
             bytes[*byte_offset] = low;
             bytes[*byte_offset + 1] = high;
         }
-        Ok(bytes)
+
+        // Convert the labels to a HashMap data structure that makes it easy to go
+        // from an address to the string. This new data structure will own the strings.
+        let mut address_to_label: AddressToLabel = HashMap::new();
+        let addresses = labels.addresses.expect("Expected addresses to exist");
+        for string_index in 0..labels.strings.len() {
+            let address = addresses.get(string_index).expect("Unable to get address");
+
+            // Take ownership of the string.
+            let old_string = labels
+                .strings
+                .get_mut(string_index)
+                .expect("Unable to get string");
+            let mut new_string = String::with_capacity(0);
+
+            std::mem::swap(&mut new_string, old_string);
+
+            address_to_label.insert(
+                *address as u16 + memory_range::CARTRIDGE_SPACE.min,
+                new_string,
+            );
+        }
+
+        Ok(BytesLabels {
+            bytes,
+            address_to_label,
+        })
     }
 
     fn to_bytes_before_labels(&mut self) -> Result<Vec<u8>, String> {
@@ -833,7 +873,7 @@ mod test {
 
             match parser.parse() {
                 Ok(_) => {
-                    let bytes = parser.to_bytes().unwrap();
+                    let BytesLabels { bytes, .. } = parser.to_bytes().unwrap();
                     // Here's the biggest reason for the macro, this will add the `as u8`
                     // to the bytes generated.
                     assert_eq!(bytes, vec![$( $bytes as u8, )*]);

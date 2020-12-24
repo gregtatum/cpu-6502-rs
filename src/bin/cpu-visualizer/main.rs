@@ -3,7 +3,7 @@ mod util;
 
 use crate::util::event::{Event, Events};
 use nes::{
-    asm::AsmLexer,
+    asm::{AddressToLabel, AsmLexer, BytesLabels},
     bus::Bus,
     cpu_6502::Cpu6502,
     opcodes::{mode_to_operand_count, Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
@@ -21,10 +21,11 @@ use tui::{
 
 const BORDER_COLOR: Color = Color::Rgb(150, 150, 150);
 const CYAN: Color = Color::Rgb(0, 200, 200);
+const MAGENTA: Color = Color::Rgb(200, 100, 200);
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Load the CPU first, as this can exit the process.
-    let mut cpu = load_cpu();
+    let (mut cpu, address_to_label) = load_cpu();
 
     // Terminal initialization
     let stdout = io::stdout().into_raw_mode()?;
@@ -107,6 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         &cpu,
                         main_rect_inner_height,
                         &mut executed_instructions,
+                        &address_to_label,
                     ))
                     .block(create_block("Instructions"))
                     .alignment(Alignment::Left),
@@ -232,6 +234,7 @@ fn get_instructions_text<'a>(
     cpu: &'a Cpu6502,
     height: u16,
     executed_instructions: &'a mut VecDeque<Spans<'static>>,
+    address_to_label: &AddressToLabel,
 ) -> Vec<Spans<'a>> {
     let mut spans_list: Vec<Spans> = vec![];
     let bus = cpu.bus.borrow();
@@ -258,8 +261,28 @@ fn get_instructions_text<'a>(
             }
         };
 
+        // label:
+        // ^^^^^^
+        //   $4027 clc
+        match address_to_label.get(&pc) {
+            Some(pc_label) => {
+                let mut span = Span::styled(format!("{}: ", pc_label), base_style.fg(MAGENTA));
+                spans_list.push(Spans::from(span.clone()));
+
+                if i == 0 {
+                    // Remember this for in the list of executed instructions.
+                    span.style = base_style.fg(Color::Rgb(170, 170, 170));
+                    executed_instructions.push_front(Spans::from(span));
+                }
+            }
+            None => {}
+        };
+
+        // label:
+        //   $4027 clc
+        //   ^^^^^
         parts.push(Span::styled(
-            format!("${:02x} ", pc.clone()),
+            format!("  ${:02x} ", pc.clone()),
             base_style.fg(CYAN),
         ));
 
@@ -336,7 +359,7 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     spans.push(Spans::from(Span::styled(
         "    0011 2233 4455 6677 8899 aabb ccdd eeff ".repeat(cols as usize),
         //   0011 2233 4455 6677 8899 aabb ccdd eeff
-        style.fg(Color::Rgb(200, 100, 200)),
+        style.fg(MAGENTA),
     )));
 
     let mut parts = vec![];
@@ -371,7 +394,7 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     spans
 }
 
-fn load_cpu() -> Cpu6502 {
+fn load_cpu() -> (Cpu6502, AddressToLabel) {
     let args: Vec<String> = env::args().collect();
     let filename = match args.get(1) {
         Some(f) => f,
@@ -391,13 +414,19 @@ fn load_cpu() -> Cpu6502 {
 
     match lexer.parse() {
         Ok(_) => {
-            let mut program = lexer.to_bytes().unwrap();
-            program.push(OpCode::KIL as u8);
-            Cpu6502::new({
-                let bus = Bus::new_shared_bus();
-                bus.borrow_mut().load_program(&program);
-                bus
-            })
+            let BytesLabels {
+                mut bytes,
+                address_to_label,
+            } = lexer.to_bytes().unwrap();
+            bytes.push(OpCode::KIL as u8);
+            (
+                Cpu6502::new({
+                    let bus = Bus::new_shared_bus();
+                    bus.borrow_mut().load_program(&bytes);
+                    bus
+                }),
+                address_to_label,
+            )
         }
         Err(parse_error) => {
             parse_error.panic_nicely();
