@@ -85,8 +85,10 @@ pub fn assert_status(cpu: &Cpu6502, value: u8) {
     let expected_decimal = value & StatusFlag::Decimal as u8 == StatusFlag::Decimal as u8;
     let expected_break = value & StatusFlag::Break as u8 == StatusFlag::Break as u8;
     let expected_push = value & StatusFlag::Push as u8 == StatusFlag::Push as u8;
-    let expected_overflow = value & StatusFlag::Overflow as u8 == StatusFlag::Overflow as u8;
-    let expected_negative = value & StatusFlag::Negative as u8 == StatusFlag::Negative as u8;
+    let expected_overflow =
+        value & StatusFlag::Overflow as u8 == StatusFlag::Overflow as u8;
+    let expected_negative =
+        value & StatusFlag::Negative as u8 == StatusFlag::Negative as u8;
 
     let actual_carry = cpu.is_status_flag_set(StatusFlag::Carry);
     let actual_zero = cpu.is_status_flag_set(StatusFlag::Zero);

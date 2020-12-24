@@ -75,10 +75,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let instructions_rect =
                     Rect::new(col1, 0, instructions_rect_width, main_rect_height);
 
-                let registers_rect = Rect::new(col2, 0, registers_rect_width, main_rect_height);
+                let registers_rect =
+                    Rect::new(col2, 0, registers_rect_width, main_rect_height);
 
-                let block =
-                    Block::default().style(Style::default().bg(Color::Black).fg(Color::White));
+                let block = Block::default()
+                    .style(Style::default().bg(Color::Black).fg(Color::White));
                 frame.render_widget(block, frame_rect);
 
                 let create_block = |title| {
@@ -91,7 +92,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                         ))
                 };
 
-                let ram_text = get_ram_text(&cpu, ram_rect_inner_width, main_rect_inner_height);
+                let ram_text =
+                    get_ram_text(&cpu, ram_rect_inner_width, main_rect_inner_height);
                 let zero_page_rect = {
                     let mut rect = ram_rect.clone();
                     rect.height = ram_text.len() as u16 + 2;
@@ -248,7 +250,8 @@ fn get_instructions_text<'a>(
     let executed_len = height / 3;
     executed_instructions.truncate(executed_len as usize);
 
-    let next_instructructions_len = height - executed_instructions.len() as u16 + height % 3;
+    let next_instructructions_len =
+        height - executed_instructions.len() as u16 + height % 3;
 
     for spans in executed_instructions.iter().rev() {
         spans_list.push(spans.clone());

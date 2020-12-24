@@ -315,7 +315,9 @@ impl Cpu6502 {
             // In an implied instruction, the data and/or destination is mandatory for
             // the instruction. For example, the CLC instruction is implied, it is going
             // to clear the processor's Carry flag.
-            Mode::Implied => panic!("An implied mode should never be directly activated."),
+            Mode::Implied => {
+                panic!("An implied mode should never be directly activated.")
+            }
             // The indirect addressing mode is similar to the absolute mode, but the
             // next u16 is actually a pointer to another address. Use this next address
             // for the operation.

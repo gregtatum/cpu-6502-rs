@@ -5,22 +5,22 @@
 use crate::bus::SharedBus;
 
 enum PpuRegister {
-  /// PPU control register - Write only
-  Ctrl = 0x2000,
-  /// PPU mask register - Write only
-  Mask = 0x2001,
-  /// PPU status register - Read only
-  Status = 0x2002,
-  /// OAM address port - Write
-  Oam = 0x2003,
-  /// OAM read/write
-  OamData = 0x2004,
-  /// Scroll - write x2
-  Scroll = 0x2005,
-  /// Address - write x2
-  Address = 0x2006,
-  /// VRAM read/write data register
-  Data = 0x2007,
+    /// PPU control register - Write only
+    Ctrl = 0x2000,
+    /// PPU mask register - Write only
+    Mask = 0x2001,
+    /// PPU status register - Read only
+    Status = 0x2002,
+    /// OAM address port - Write
+    Oam = 0x2003,
+    /// OAM read/write
+    OamData = 0x2004,
+    /// Scroll - write x2
+    Scroll = 0x2005,
+    /// Address - write x2
+    Address = 0x2006,
+    /// VRAM read/write data register
+    Data = 0x2007,
 }
 
 /// PPU control register
@@ -43,13 +43,13 @@ enum PpuRegister {
 /// +--------- Generate an NMI at the start of the
 ///            vertical blanking interval (0: off; 1: on)
 enum PpuCtrl {
-  V = 0b1000_0000,
-  P = 0b0100_0000,
-  H = 0b0010_0000,
-  B = 0b0001_0000,
-  S = 0b0000_1000,
-  I = 0b0000_0100,
-  N = 0b0000_0011,
+    V = 0b1000_0000,
+    P = 0b0100_0000,
+    H = 0b0010_0000,
+    B = 0b0001_0000,
+    S = 0b0000_1000,
+    I = 0b0000_0100,
+    N = 0b0000_0011,
 }
 
 /// This register controls the rendering of sprites and backgrounds, as well as colour effects.
@@ -69,14 +69,14 @@ enum PpuCtrl {
 /// |+-------- Emphasize green
 /// +--------- Emphasize blue
 enum PpuMask {
-  Blue = 0b1000_0000,
-  Green = 0b0100_0000,
-  Red = 0b0010_0000,
-  ShowSprites = 0b0001_0000,
-  ShowBackground = 0b0000_1000,
-  ShowLeftmostSprites = 0b0000_0100,
-  ShowLeftmostBackground = 0b0000_0010,
-  GrayScale = 0b0000_0001,
+    Blue = 0b1000_0000,
+    Green = 0b0100_0000,
+    Red = 0b0010_0000,
+    ShowSprites = 0b0001_0000,
+    ShowBackground = 0b0000_1000,
+    ShowLeftmostSprites = 0b0000_0100,
+    ShowLeftmostBackground = 0b0000_0010,
+    GrayScale = 0b0000_0001,
 }
 
 /// This register reflects the state of various functions inside the PPU. It is often
@@ -104,39 +104,39 @@ enum PpuMask {
 ///            line); cleared after reading $2002 and at dot 1 of the
 ///            pre-render line.
 enum PpuStatus {
-  VerticalBlank = 0b1000_0000,
-  SpriteHit = 0b0100_0000,
-  SpriteOverflow = 0b0010_0000,
+    VerticalBlank = 0b1000_0000,
+    SpriteHit = 0b0100_0000,
+    SpriteOverflow = 0b0010_0000,
 }
 
 pub struct Ppu {
-  bus: SharedBus,
+    bus: SharedBus,
 }
 
 impl Ppu {
-  pub fn new(bus: SharedBus) -> Ppu {
-    Ppu { bus }
-  }
-
-  fn get_register(&self, register: PpuRegister) -> u8 {
-    self.bus.borrow().read_u8(register as u16)
-  }
-
-  fn set_register(&self, register: PpuRegister, value: u8) {
-    self.bus.borrow_mut().set_u8(register as u16, value);
-  }
-
-  fn get_register_flag(&self, register: PpuRegister, flag: u8) -> bool {
-    self.get_register(register) & flag == flag
-  }
-
-  fn get_base_name_table(&self) -> u16 {
-    match self.get_register(PpuRegister::Ctrl) & (PpuCtrl::N as u8) {
-      0 => 0x2000,
-      1 => 0x2400,
-      2 => 0x2800,
-      3 => 0x2C00,
-      _ => panic!("Getting the base name table failed."),
+    pub fn new(bus: SharedBus) -> Ppu {
+        Ppu { bus }
     }
-  }
+
+    fn get_register(&self, register: PpuRegister) -> u8 {
+        self.bus.borrow().read_u8(register as u16)
+    }
+
+    fn set_register(&self, register: PpuRegister, value: u8) {
+        self.bus.borrow_mut().set_u8(register as u16, value);
+    }
+
+    fn get_register_flag(&self, register: PpuRegister, flag: u8) -> bool {
+        self.get_register(register) & flag == flag
+    }
+
+    fn get_base_name_table(&self) -> u16 {
+        match self.get_register(PpuRegister::Ctrl) & (PpuCtrl::N as u8) {
+            0 => 0x2000,
+            1 => 0x2400,
+            2 => 0x2800,
+            3 => 0x2C00,
+            _ => panic!("Getting the base name table failed."),
+        }
+    }
 }

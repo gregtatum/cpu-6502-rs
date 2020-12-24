@@ -294,7 +294,8 @@ impl<'a> AsmLexer<'a> {
                             }
                             None => {
                                 self.expect_next_character(':')?;
-                                let label = Token::LabelDefinition(self.labels.take_string(word));
+                                let label =
+                                    Token::LabelDefinition(self.labels.take_string(word));
                                 self.tokens.push(label);
                             }
                         }
@@ -341,8 +342,8 @@ impl<'a> AsmLexer<'a> {
         // Fill in the proper addresses for the labels. The code will be placed at
         // memory_range::CARTRIDGE_SPACE.min when placed into the emulator.
         for (string_index, byte_offset) in labels.addresses_to_label.iter() {
-            let label_value_u16 =
-                labels.get_address(*string_index)? as u16 + memory_range::CARTRIDGE_SPACE.min;
+            let label_value_u16 = labels.get_address(*string_index)? as u16
+                + memory_range::CARTRIDGE_SPACE.min;
             let [low, high] = label_value_u16.to_le_bytes();
             bytes[*byte_offset] = low;
             bytes[*byte_offset + 1] = high;
@@ -400,7 +401,9 @@ impl<'a> AsmLexer<'a> {
                             tokens.next();
                         }
                         Some(Token::Mode(mode)) => {
-                            bytes.push(instruction_mode_to_op_code(instruction, mode)? as u8);
+                            bytes.push(
+                                instruction_mode_to_op_code(instruction, mode)? as u8
+                            );
                             tokens.next();
 
                             match mode {
@@ -438,9 +441,10 @@ impl<'a> AsmLexer<'a> {
                             }
                         }
                         _ => {
-                            bytes
-                                .push(instruction_mode_to_op_code(instruction, &TokenMode::None)?
-                                    as u8);
+                            bytes.push(instruction_mode_to_op_code(
+                                instruction,
+                                &TokenMode::None,
+                            )? as u8);
                         }
                     },
                     Token::LabelDefinition(string_index) => {
@@ -459,7 +463,10 @@ impl<'a> AsmLexer<'a> {
                         bytes.push(b);
                     }
                     token => {
-                        return Err(format!("Unexpected token at the root level: {:#x?}", token))
+                        return Err(format!(
+                            "Unexpected token at the root level: {:#x?}",
+                            token
+                        ))
                     }
                 },
                 None => break,
@@ -503,7 +510,9 @@ impl<'a> AsmLexer<'a> {
                 // e.g. $33
                 let string = self.get_word(None)?;
                 match u8::from_str_radix(&string, 16) {
-                    Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                    Err(err) => {
+                        Err(format!("Unable to parse hex string as number {:?}", err))
+                    }
                     Ok(value) => Ok(value),
                 }
             }
@@ -511,7 +520,9 @@ impl<'a> AsmLexer<'a> {
                 // e.g. %11110000
                 let string = self.get_word(None)?;
                 match u8::from_str_radix(&string, 2) {
-                    Err(err) => Err(format!("Unable to parse binary string as number {:?}", err)),
+                    Err(err) => {
+                        Err(format!("Unable to parse binary string as number {:?}", err))
+                    }
                     Ok(value) => Ok(value),
                 }
             }
@@ -566,14 +577,21 @@ impl<'a> AsmLexer<'a> {
                 let word = self.get_word(None)?;
                 match word.len() {
                     2 => match u8::from_str_radix(&word, 16) {
-                        Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                        Err(err) => {
+                            Err(format!("Unable to parse hex string as number {:?}", err))
+                        }
                         Ok(number) => Ok(U8OrU16::U8(number)),
                     },
                     4 => match u16::from_str_radix(&word, 16) {
-                        Err(err) => Err(format!("Unable to parse hex string as number {:?}", err)),
+                        Err(err) => {
+                            Err(format!("Unable to parse hex string as number {:?}", err))
+                        }
                         Ok(number) => Ok(U8OrU16::U16(number)),
                     },
-                    _ => Err("This hex number must be either 2 or 4 digits long.".to_string()),
+                    _ => {
+                        Err("This hex number must be either 2 or 4 digits long."
+                            .to_string())
+                    }
                 }
             }
             '%' => {
@@ -581,18 +599,21 @@ impl<'a> AsmLexer<'a> {
                 let word = self.get_word(None)?;
                 match word.len() {
                     8 => match u8::from_str_radix(&word, 2) {
-                        Err(err) => {
-                            Err(format!("Unable to parse binary string as number {:?}", err))
-                        }
+                        Err(err) => Err(format!(
+                            "Unable to parse binary string as number {:?}",
+                            err
+                        )),
                         Ok(number) => Ok(U8OrU16::U8(number)),
                     },
                     16 => match u16::from_str_radix(&word, 2) {
-                        Err(err) => {
-                            Err(format!("Unable to parse binary string as number {:?}", err))
-                        }
+                        Err(err) => Err(format!(
+                            "Unable to parse binary string as number {:?}",
+                            err
+                        )),
                         Ok(number) => Ok(U8OrU16::U16(number)),
                     },
-                    _ => Err("This binary number must be either 8 or 16 digits long.".to_string()),
+                    _ => Err("This binary number must be either 8 or 16 digits long."
+                        .to_string()),
                 }
             }
             character => {
@@ -778,7 +799,10 @@ impl<'a> AsmLexer<'a> {
         self.verify_instruction_needs_no_operand(instruction)
     }
 
-    fn verify_instruction_needs_no_operand(&self, instruction: Instruction) -> Result<(), String> {
+    fn verify_instruction_needs_no_operand(
+        &self,
+        instruction: Instruction,
+    ) -> Result<(), String> {
         match instruction {
             Instruction::DEX => Ok(()),
             Instruction::DEY => Ok(()),
@@ -806,7 +830,10 @@ impl<'a> AsmLexer<'a> {
             Instruction::PLP => Ok(()),
             Instruction::PHP => Ok(()),
             Instruction::KIL => Ok(()),
-            _ => Err(format!("Instruction {:?} expected an operand", instruction).to_string()),
+            _ => {
+                Err(format!("Instruction {:?} expected an operand", instruction)
+                    .to_string())
+            }
         }
     }
 
@@ -828,7 +855,12 @@ impl<'a> AsmLexer<'a> {
                 Some(character) => match char_to_enum(&character) {
                     Character::Whitespace => continue,
                     Character::Value(';') => return self.ignore_comment_contents(),
-                    value => return Err(format!("Unknown character encountered \"{:?}\".", value)),
+                    value => {
+                        return Err(format!(
+                            "Unknown character encountered \"{:?}\".",
+                            value
+                        ))
+                    }
                 },
                 None => {
                     return Ok(());
@@ -931,9 +963,9 @@ mod test {
                 kil;
             ",
             [
-                LDA_imm, 0x66, ORA_abs, 0x34, 0x12, ASL_abx, 0x34, 0x12, EOR_aby, 0x34, 0x12,
-                BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind, 0x34, 0x12,
-                AND_izx, 0xaa, AND_izy, 0xbb, KIL
+                LDA_imm, 0x66, ORA_abs, 0x34, 0x12, ASL_abx, 0x34, 0x12, EOR_aby, 0x34,
+                0x12, BPL_rel, 0x03, STY_zp, 0x4, STA_zpx, 0x05, STX_zpy, 0x06, JMP_ind,
+                0x34, 0x12, AND_izx, 0xaa, AND_izy, 0xbb, KIL
             ]
         );
     }
@@ -958,10 +990,11 @@ mod test {
                 and (%11111010),Y ; indirect indexed y
             ",
             [
-                LDA_imm, 0b11110000, ORA_abs, 0b01010101, 0b11110001, ASL_abx, 0b01010101,
-                0b11110010, EOR_aby, 0b01010101, 0b11110011, BPL_rel, 0b11110100, STY_zp,
-                0b11110101, STA_zpx, 0b11110110, STX_zpy, 0b11110111, JMP_ind, 0b01010101,
-                0b11111000, AND_izx, 0b11111001, AND_izy, 0b11111010
+                LDA_imm, 0b11110000, ORA_abs, 0b01010101, 0b11110001, ASL_abx,
+                0b01010101, 0b11110010, EOR_aby, 0b01010101, 0b11110011, BPL_rel,
+                0b11110100, STY_zp, 0b11110101, STA_zpx, 0b11110110, STX_zpy, 0b11110111,
+                JMP_ind, 0b01010101, 0b11111000, AND_izx, 0b11111001, AND_izy,
+                0b11111010
             ]
         );
     }
