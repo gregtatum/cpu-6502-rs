@@ -1,3 +1,9 @@
+use crate::cpu_6502::opcodes_illegal::*;
+use crate::cpu_6502::opcodes_jump::*;
+use crate::cpu_6502::opcodes_logical::*;
+use crate::cpu_6502::opcodes_move::*;
+use crate::cpu_6502::Cpu6502;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
     Absolute,         // abs
@@ -985,4 +991,25 @@ pub const OPCODE_STRING_TABLE: [&'static str; 256] = [
     "cpx", "sbc", "inc", "isc", "inx", "sbc", "nop", "sbc", "cpx", "sbc", "inc", "isc",
     "beq", "sbc", "kil", "isc", "nop", "sbc", "inc", "isc", "sed", "sbc", "nop", "isc",
     "nop", "sbc", "inc", "isc",
+];
+
+type OperationFn = fn(&mut Cpu6502, Mode, u8);
+
+pub const OPERATION_FN_TABLE: [OperationFn; 256] = [
+    brk, ora, kil, slo, nop, ora, asl, slo, php, ora, asl, anc, nop, ora, asl, slo, bpl,
+    ora, kil, slo, nop, ora, asl, slo, clc, ora, nop, slo, nop, ora, asl, slo, jsr, and,
+    kil, rla, bit, and, rol, rla, plp, and, rol, anc, bit, and, rol, rla, bmi, and, kil,
+    rla, nop, and, rol, rla, sec, and, nop, rla, nop, and, rol, rla, rti, eor, kil, sre,
+    nop, eor, lsr, sre, pha, eor, lsr, alr, jmp, eor, lsr, sre, bvc, eor, kil, sre, nop,
+    eor, lsr, sre, cli, eor, nop, sre, nop, eor, lsr, sre, rts, adc, kil, rra, nop, adc,
+    ror, rra, pla, adc, ror, arr, jmp, adc, ror, rra, bvs, adc, kil, rra, nop, adc, ror,
+    rra, sei, adc, nop, rra, nop, adc, ror, rra, nop, sta, nop, sax, sty, sta, stx, sax,
+    dey, nop, txa, xaa, sty, sta, stx, sax, bcc, sta, kil, ahx, sty, sta, stx, sax, tya,
+    sta, txs, tas, shy, sta, shx, ahx, ldy, lda, ldx, lax, ldy, lda, ldx, lax, tay, lda,
+    tax, lax, ldy, lda, ldx, lax, bcs, lda, kil, lax, ldy, lda, ldx, lax, clv, lda, tsx,
+    las, ldy, lda, ldx, lax, cpy, cmp, nop, dcp, cpy, cmp, dec, dcp, iny, cmp, dex, axs,
+    cpy, cmp, dec, dcp, bne, cmp, kil, dcp, nop, cmp, dec, dcp, cld, cmp, nop, dcp, nop,
+    cmp, dec, dcp, cpx, sbc, nop, isc, cpx, sbc, inc, isc, inx, sbc, nop, sbc, cpx, sbc,
+    inc, isc, beq, sbc, kil, isc, nop, sbc, inc, isc, sed, sbc, nop, isc, nop, sbc, inc,
+    isc,
 ];
