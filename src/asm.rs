@@ -261,8 +261,8 @@ impl<'a> AsmLexer<'a> {
         Err(format!("{} Location: {}:{}", reason, self.row, self.column))
     }
 
-    /// For now the asm is simple enough to parse in one pass. Once I get to labels
-    /// and other features I'll change it up to an AST.
+    /// Run the lexer by parsing the characters into tokens. Things like labels
+    /// will be computed later.
     pub fn parse(&mut self) -> Result<(), ParseError> {
         loop {
             match self.lines.next() {
@@ -957,7 +957,7 @@ impl<'a> AsmLexer<'a> {
         }
 
         iter_peek_match!(self.characters, character => {
-            Character::Alpha | Character::Numeric => {
+            Character::Alpha | Character::Numeric | Character::Value('_') => {
                 word.push(character);
                 self.next_character();
             },
