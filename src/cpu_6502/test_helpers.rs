@@ -1,6 +1,6 @@
 #![macro_use]
 
-use crate::asm::AsmLexer;
+use crate::asm::{AsmLexer, BytesLabels};
 use crate::bus::Bus;
 use crate::cpu_6502::*;
 
@@ -19,11 +19,11 @@ pub fn run_program(text: &str) -> Cpu6502 {
 
     match lexer.parse() {
         Ok(_) => {
-            let mut program = lexer.to_bytes().unwrap();
-            program.push(OpCode::KIL as u8);
+            let BytesLabels { mut bytes, .. } = lexer.to_bytes().unwrap();
+            bytes.push(OpCode::KIL as u8);
             let mut cpu = Cpu6502::new({
                 let bus = Bus::new_shared_bus();
-                bus.borrow_mut().load_program(&program);
+                bus.borrow_mut().load_program(&bytes);
                 bus
             });
 

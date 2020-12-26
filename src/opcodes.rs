@@ -34,6 +34,7 @@ pub enum TokenMode {
     Indirect,           // ind
     IndirectX,          // izx
     IndirectY,          // izy
+    Relative,           // rel
     ZeroPageOrRelative, // zp,rel
     ZeroPageX,          // zpx
     ZeroPageY,          // zpy
@@ -480,16 +481,24 @@ pub fn instruction_mode_to_op_code(
         (Instruction::ASL, TokenMode::ZeroPageX) => OpCode::ASL_zpx,
         (Instruction::AXS, TokenMode::Immediate) => OpCode::AXS_imm,
         (Instruction::BCC, TokenMode::ZeroPageOrRelative) => OpCode::BCC_rel,
+        (Instruction::BCC, TokenMode::Relative) => OpCode::BCC_rel,
         (Instruction::BCS, TokenMode::ZeroPageOrRelative) => OpCode::BCS_rel,
+        (Instruction::BCS, TokenMode::Relative) => OpCode::BCS_rel,
         (Instruction::BEQ, TokenMode::ZeroPageOrRelative) => OpCode::BEQ_rel,
+        (Instruction::BEQ, TokenMode::Relative) => OpCode::BEQ_rel,
         (Instruction::BIT, TokenMode::Absolute) => OpCode::BIT_abs,
         (Instruction::BIT, TokenMode::ZeroPageOrRelative) => OpCode::BIT_zp,
         (Instruction::BMI, TokenMode::ZeroPageOrRelative) => OpCode::BMI_rel,
+        (Instruction::BMI, TokenMode::Relative) => OpCode::BMI_rel,
         (Instruction::BNE, TokenMode::ZeroPageOrRelative) => OpCode::BNE_rel,
+        (Instruction::BNE, TokenMode::Relative) => OpCode::BNE_rel,
         (Instruction::BPL, TokenMode::ZeroPageOrRelative) => OpCode::BPL_rel,
+        (Instruction::BPL, TokenMode::Relative) => OpCode::BPL_rel,
         (Instruction::BRK, TokenMode::None) => OpCode::BRK,
         (Instruction::BVC, TokenMode::ZeroPageOrRelative) => OpCode::BVC_rel,
+        (Instruction::BVC, TokenMode::Relative) => OpCode::BVC_rel,
         (Instruction::BVS, TokenMode::ZeroPageOrRelative) => OpCode::BVS_rel,
+        (Instruction::BVS, TokenMode::Relative) => OpCode::BVS_rel,
         (Instruction::CLC, TokenMode::None) => OpCode::CLC,
         (Instruction::CLD, TokenMode::None) => OpCode::CLD,
         (Instruction::CLI, TokenMode::None) => OpCode::CLI,

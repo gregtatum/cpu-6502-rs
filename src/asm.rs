@@ -33,6 +33,11 @@ pub enum U8OrU16 {
 pub type StringIndex = usize;
 pub type ByteOffset = usize;
 
+pub enum LabelMappingType {
+    Absolute,
+    Relative,
+}
+
 /// This struct is a string table that will hold a unique reference to a string.
 /// This makes it easy to use simple numeric indexes to refer to a string rather
 /// that duplicating a string and worrying about ownership. There
@@ -42,7 +47,7 @@ pub type ByteOffset = usize;
 pub struct LabelTable {
     strings: Vec<String>,
     addresses: Option<Vec<ByteOffset>>,
-    pub addresses_to_label: Vec<(StringIndex, ByteOffset)>,
+    pub addresses_to_label: Vec<(StringIndex, ByteOffset, LabelMappingType)>,
 }
 
 impl LabelTable {
@@ -341,34 +346,66 @@ impl<'a> AsmLexer<'a> {
 
         // Fill in the proper addresses for the labels. The code will be placed at
         // memory_range::CARTRIDGE_SPACE.min when placed into the emulator.
-        for (string_index, byte_offset) in labels.addresses_to_label.iter() {
-            let label_value_u16 = labels.get_address(*string_index)? as u16
-                + memory_range::CARTRIDGE_SPACE.min;
-            let [low, high] = label_value_u16.to_le_bytes();
-            bytes[*byte_offset] = low;
-            bytes[*byte_offset + 1] = high;
+        for (string_index, byte_offset, label_mapping_type) in
+            labels.addresses_to_label.iter()
+        {
+            match label_mapping_type {
+                LabelMappingType::Relative => {
+                    // Map relative ranges by performing the arithmetic to get the relative
+                    // difference between the current opcode and the label. This relative
+                    // jump in memory gets stored as the operand.
+                    let label_value_u16 = labels.get_address(*string_index)? as u16;
+                    let offset: i32 = label_value_u16 as i32
+                        - *byte_offset as i32
+                        // The byte offset is for the operand, move it to the instruction.
+                        + 1;
+
+                    if offset > 127 || offset < -128 {
+                        return Err(format!(
+                            "A relative label was used too far away to be generated."
+                        ));
+                    }
+
+                    // Take only the least significant byte of the offset, which really
+                    // contains an i8.
+                    bytes[*byte_offset] = offset as u8;
+                }
+                LabelMappingType::Absolute => {
+                    let label_value_u16 = labels.get_address(*string_index)? as u16
+                        + memory_range::CARTRIDGE_SPACE.min;
+
+                    let [low, high] = label_value_u16.to_le_bytes();
+                    bytes[*byte_offset] = low;
+                    bytes[*byte_offset + 1] = high;
+                }
+            };
         }
 
         // Convert the labels to a HashMap data structure that makes it easy to go
         // from an address to the string. This new data structure will own the strings.
         let mut address_to_label: AddressToLabel = HashMap::new();
-        let addresses = labels.addresses.expect("Expected addresses to exist");
-        for string_index in 0..labels.strings.len() {
-            let address = addresses.get(string_index).expect("Unable to get address");
+        match labels.addresses {
+            Some(addresses) => {
+                for string_index in 0..labels.strings.len() {
+                    let address =
+                        addresses.get(string_index).expect("Unable to get address");
 
-            // Take ownership of the string.
-            let old_string = labels
-                .strings
-                .get_mut(string_index)
-                .expect("Unable to get string");
-            let mut new_string = String::with_capacity(0);
+                    // Take ownership of the string.
+                    let old_string = labels
+                        .strings
+                        .get_mut(string_index)
+                        .expect("Unable to get string");
+                    let mut new_string = String::with_capacity(0);
 
-            std::mem::swap(&mut new_string, old_string);
+                    std::mem::swap(&mut new_string, old_string);
 
-            address_to_label.insert(
-                *address as u16 + memory_range::CARTRIDGE_SPACE.min,
-                new_string,
-            );
+                    address_to_label.insert(
+                        *address as u16 + memory_range::CARTRIDGE_SPACE.min,
+                        new_string,
+                    );
+                }
+            }
+            None => {}
         }
 
         Ok(BytesLabels {
@@ -385,20 +422,60 @@ impl<'a> AsmLexer<'a> {
                 Some(token) => match token {
                     Token::Instruction(instruction) => match tokens.peek() {
                         Some(Token::LabelOperand(string_index)) => {
-                            bytes.push(instruction_mode_to_op_code(
-                                instruction,
-                                &TokenMode::Absolute,
-                            )? as u8);
+                            match instruction {
+                                Instruction::BPL
+                                | Instruction::BMI
+                                | Instruction::BVC
+                                | Instruction::BVS
+                                | Instruction::BCC
+                                | Instruction::BCS
+                                | Instruction::BNE
+                                | Instruction::BEQ => {
+                                    // labelname:
+                                    //   clc
+                                    //   bcc labelname; branch using a relative instruction
+                                    //   ^^^ ^^^^^^^^^
+                                    //   |   |
+                                    //   |   relative label
+                                    //   instruction
+                                    let opcode = instruction_mode_to_op_code(
+                                        instruction,
+                                        &TokenMode::Relative,
+                                    )?;
 
-                            // Go back and fill this label in.
-                            self.labels
-                                .addresses_to_label
-                                .push((*string_index, bytes.len()));
+                                    bytes.push(opcode as u8);
 
-                            // Push on a u16 address which will be filled in later.
-                            bytes.push(0);
-                            bytes.push(0);
-                            tokens.next();
+                                    // Go back and fill this label in with a relative address.
+                                    self.labels.addresses_to_label.push((
+                                        *string_index,
+                                        bytes.len(),
+                                        LabelMappingType::Relative,
+                                    ));
+
+                                    // Push on a u8 address which will be filled in later.
+                                    bytes.push(0);
+                                    tokens.next();
+                                }
+                                _ => {
+                                    let opcode = instruction_mode_to_op_code(
+                                        instruction,
+                                        &TokenMode::Absolute,
+                                    )?;
+                                    bytes.push(opcode as u8);
+
+                                    // Go back and fill this label in.
+                                    self.labels.addresses_to_label.push((
+                                        *string_index,
+                                        bytes.len(),
+                                        LabelMappingType::Absolute,
+                                    ));
+
+                                    // Push on a u16 address which will be filled in later.
+                                    bytes.push(0);
+                                    bytes.push(0);
+                                    tokens.next();
+                                }
+                            };
                         }
                         Some(Token::Mode(mode)) => {
                             bytes.push(
@@ -426,6 +503,7 @@ impl<'a> AsmLexer<'a> {
                                     };
                                 }
                                 TokenMode::ZeroPageOrRelative
+                                | TokenMode::Relative
                                 | TokenMode::ZeroPageX
                                 | TokenMode::ZeroPageY
                                 | TokenMode::Immediate
@@ -908,7 +986,7 @@ mod test {
                     let BytesLabels { bytes, .. } = parser.to_bytes().unwrap();
                     // Here's the biggest reason for the macro, this will add the `as u8`
                     // to the bytes generated.
-                    assert_eq!(bytes, vec![$( $bytes as u8, )*]);
+                    assert_eq!(vec![$( $bytes as u8, )*], bytes);
                 }
                 Err(parse_error) => {
                     parse_error.panic_nicely();
@@ -1011,15 +1089,46 @@ mod test {
     }
 
     #[test]
+    fn test_relative_labels() {
+        assert_program!(
+            "
+                root:
+                  clc ; -3 byte = 253 u8
+                  clc ; -2 byte = 254 u8
+                  clc ; -1 byte = 255 u8
+                  bpl root     ; relative
+                  clc
+            ",
+            [CLC, CLC, CLC, BPL_rel, 253, CLC]
+        );
+    }
+
+    #[test]
+    fn test_relative_labels_positive() {
+        assert_program!(
+            "
+                  clc
+                  bpl root     ; relative
+                  clc ; 2
+                  clc ; 3
+                  clc ; 4
+                  root:
+                  clc ; 5
+            ",
+            [CLC, BPL_rel, 5, CLC, CLC, CLC, CLC]
+        );
+    }
+
+    #[test]
     fn test_labels() {
         assert_program!(
             "
                 jmp mylabel
                 lda #$11
-                mylabel: ; This is address 0x0005
+                mylabel: ; This is address 0x4025
                 lda #$22
             ",
-            [JMP_abs, 0x05, 0x00, LDA_imm, 0x11, LDA_imm, 0x22]
+            [JMP_abs, 0x25, 0x40, LDA_imm, 0x11, LDA_imm, 0x22]
         );
     }
 
@@ -1030,9 +1139,9 @@ mod test {
                              jmp mylabel
                             .byte $11
                             .byte $22, $33
-                mylabel:    .word $5544      ; This is address 0x0006
+                mylabel:    .word $5544      ; This is address 0x4026
             ",
-            [JMP_abs, 0x06, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55]
+            [JMP_abs, 0x26, 0x40, 0x11, 0x22, 0x33, 0x44, 0x55]
         );
     }
 
