@@ -307,6 +307,19 @@ fn get_instructions_text<'a>(
         let mode = ADDRESSING_MODE_TABLE[operation as usize];
         parts.push(Span::styled(opcode, base_style.fg(Color::Yellow)));
 
+        // let get_u16 = || {
+        //     let value = bus.read_u8(pc);
+        //     pc += 1
+        // };
+        let mut get_u8 = || {
+            let value = bus.read_u8(pc);
+            pc += 1;
+            value
+        };
+        let mut add_operand = |string| {
+            parts.push(Span::styled(string, base_style.fg(Color::White)));
+        };
+
         match mode {
             Mode::Absolute
             | Mode::AbsoluteIndexedX
@@ -363,52 +376,16 @@ fn get_instructions_text<'a>(
                     parts.push(Span::styled(")", base_style.fg(Color::White)));
                 }
             }
-            Mode::ZeroPage
-            | Mode::Relative
-            | Mode::ZeroPageX
-            | Mode::ZeroPageY
-            | Mode::Immediate
-            | Mode::IndirectX
-            | Mode::IndirectY => {
-                let a = bus.read_u8(pc);
-                let b = bus.read_u8(pc + 1);
-                pc += 2;
 
-                if mode == Mode::IndirectX || mode == Mode::IndirectY {
-                    //  $4023 sta ($20,X)
-                    //            ^
-                    parts.push(Span::styled("(", base_style.fg(Color::White)));
-                }
+            // u8 operands:
+            Mode::Immediate => add_operand(format!(" #${:02x}\n", get_u8())),
+            Mode::ZeroPage => add_operand(format!(" ${:02x}\n", get_u8())),
+            Mode::ZeroPageX => add_operand(format!(" ${:02x},X\n", get_u8())),
+            Mode::ZeroPageY => add_operand(format!(" ${:02x},Y\n", get_u8())),
+            Mode::Relative => add_operand(format!(" {}\n", get_u8() as i8)),
+            Mode::IndirectX => add_operand(format!(" (${:02x},X)\n", get_u8())),
+            Mode::IndirectY => add_operand(format!(" (${:02x}),Y\n", get_u8())),
 
-                //   $4023 sta $10,Y
-                //              ^^
-                parts.push(Span::styled(
-                    format!(" ${:02x}{:02x}\n", b, a),
-                    base_style.fg(Color::White),
-                ));
-
-                // Handle indexed modes.
-                if mode == Mode::ZeroPageX {
-                    //   $4023 sta $49,X
-                    //                ^^
-                    parts.push(Span::styled(",X", base_style.fg(Color::White)));
-                }
-                if mode == Mode::ZeroPageY {
-                    //   $4023 sta $49,Y
-                    //                ^^
-                    parts.push(Span::styled(",Y", base_style.fg(Color::White)));
-                }
-                if mode == Mode::IndirectX {
-                    //  $4023 sta ($20,X)
-                    //                ^^^
-                    parts.push(Span::styled(",X)", base_style.fg(Color::White)));
-                }
-                if mode == Mode::IndirectY {
-                    //  $4023 sta ($20),Y
-                    //                ^^^
-                    parts.push(Span::styled("),Y", base_style.fg(Color::White)));
-                }
-            }
             Mode::Implied | Mode::None => {}
         }
 
