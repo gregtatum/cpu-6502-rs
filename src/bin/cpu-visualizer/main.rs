@@ -292,6 +292,8 @@ fn get_instructions_text<'a>(
             None => {}
         };
 
+        let instruction_pc = pc.clone();
+
         // label:
         //   $4027 clc
         //   ^^^^^
@@ -382,9 +384,28 @@ fn get_instructions_text<'a>(
             Mode::ZeroPage => add_operand(format!(" ${:02x}\n", get_u8())),
             Mode::ZeroPageX => add_operand(format!(" ${:02x},X\n", get_u8())),
             Mode::ZeroPageY => add_operand(format!(" ${:02x},Y\n", get_u8())),
-            Mode::Relative => add_operand(format!(" {}\n", get_u8() as i8)),
             Mode::IndirectX => add_operand(format!(" (${:02x},X)\n", get_u8())),
             Mode::IndirectY => add_operand(format!(" (${:02x}),Y\n", get_u8())),
+
+            Mode::Relative => {
+                let relative_value = get_u8() as i8;
+                let address: u16 = (instruction_pc as i32 + relative_value as i32) as u16;
+
+                match address_to_label.get(&address) {
+                    Some(label) => {
+                        parts.push(Span::styled(
+                            format!(" {}", label),
+                            base_style.fg(MAGENTA),
+                        ));
+                        // Dim out the address.
+                        parts.push(Span::styled(
+                            format!(" {:+}\n", relative_value),
+                            base_style.fg(GRAY),
+                        ))
+                    }
+                    None => add_operand(format!(" {:+}\n", get_u8() as i8)),
+                }
+            }
 
             Mode::Implied | Mode::None => {}
         }
