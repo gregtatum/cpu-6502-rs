@@ -292,7 +292,9 @@ impl Cpu6502 {
             //           Make sure and do a wrapping add in u8 space.
             Mode::ZeroPageX => (self.next_u8().wrapping_add(self.x)) as u16,
             Mode::ZeroPageY => (self.next_u8().wrapping_add(self.y)) as u16,
-            Mode::None => panic!("Mode::None is attempting to be used."),
+            // For some reason NOP is being called with this. Originally it was
+            // a panic.
+            Mode::None => 0,
         }
     }
 
