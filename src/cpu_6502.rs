@@ -257,11 +257,15 @@ impl Cpu6502 {
             // http://www.emulator101.com/more-about-binary-numbers.html
             Mode::Relative => {
                 let relative_offset = self.next_u8() as i8;
+                // We already read the instruction and operand, which incremented the
+                // pc by 2 bytes. Get the base address by moving backwards 2.
+                let base_address = self.pc - 2;
+
                 // Due to the nature of binary representaion of numbers, just adding the
                 // negative number will result in it being subtract. It will wrap,
                 // hence allow the wrapping operation.
-                let base_address = self.pc;
-                let offset_address = self.pc.wrapping_add(relative_offset as u16);
+                let offset_address = base_address.wrapping_add(relative_offset as u16);
+
                 self.incur_extra_cycle_on_page_boundary(
                     base_address,
                     offset_address,
