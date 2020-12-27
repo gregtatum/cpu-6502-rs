@@ -156,11 +156,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Key::Char('q') => {
                     break;
                 }
-                Key::Char('n') => {
+                Key::Char('n') | Key::Char('1') => {
                     if !cpu.tick() {
                         break;
                     }
                 }
+                // Skip through instructions much quicker.
+                Key::Char(c) => match c.to_digit(10) {
+                    Some(n) => {
+                        if n != 0 {
+                            for _ in 0..((n + 1).pow(2)) {
+                                if !cpu.tick() {
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
+                    None => {}
+                },
                 _ => {}
             }
         }
@@ -456,7 +469,7 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
         // ^^^
         parts.push(Span::styled(format!("${:x}0 ", i), cyan));
         for j in 0..8 {
-            let [le, be] = bus.read_u16(i * 8 + j * 2).to_le_bytes();
+            let [le, be] = bus.read_u16(i * 16 + j * 2).to_le_bytes();
             // $0000 0011 2233 4455 6677 8899 aabb ccdd eeff
             //       ^^^^
             parts.push(Span::styled(format!("{:02x}{:02x} ", le, be), {
