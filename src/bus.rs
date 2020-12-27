@@ -63,9 +63,9 @@ impl Bus {
     }
 
     pub fn set_u16(&mut self, address: u16, value: u16) {
-        let [a, b] = value.to_le_bytes();
-        self.memory[address as usize] = a;
-        self.memory[address as usize + 1] = b;
+        let [le, be] = value.to_le_bytes();
+        self.memory[address as usize] = le;
+        self.memory[address as usize + 1] = be;
     }
 
     pub fn load_program(&mut self, program: &Vec<u8>) {

@@ -490,9 +490,9 @@ impl<'a> AsmLexer<'a> {
                                 | TokenMode::Indirect => {
                                     match tokens.next() {
                                         Some(Token::U16(value)) => {
-                                            let [a, b] = value.to_le_bytes();
-                                            bytes.push(a);
-                                            bytes.push(b);
+                                            let [le, be] = value.to_le_bytes();
+                                            bytes.push(le);
+                                            bytes.push(be);
                                         },
                                         Some(token) => return Err(
                                             format!("Expected a u16 to be the operand of an operation, but found a: {:#x?}", token)
@@ -536,9 +536,9 @@ impl<'a> AsmLexer<'a> {
                     }
                     Token::U8(value) => bytes.push(*value),
                     Token::U16(value) => {
-                        let [a, b] = value.to_le_bytes();
-                        bytes.push(a);
-                        bytes.push(b);
+                        let [le, be] = value.to_le_bytes();
+                        bytes.push(le);
+                        bytes.push(be);
                     }
                     token => {
                         return Err(format!(
