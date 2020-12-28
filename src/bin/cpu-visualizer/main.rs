@@ -54,8 +54,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 //
                 // col 0                    1         2           3  main_rect_height
                 //     |--------------------|---------|-----------|  -
-                //     | ram                | instr   | registers |  |  - main_rect_inner_height
+                //     | zero page          | instr   | registers |  |  - main_rect_inner_height
                 //     |                    | uctions |           |  |  |
+                //     |                    |         |           |  |  |
+                //     |--------------------|         |           |  |  |
+                //     | stack              |         |           |  |  |
                 //     |                    |         |           |  |  |
                 //     |                    |         |           |  |  -
                 //     |--------------------|---------|-----------|  -
@@ -92,20 +95,44 @@ fn main() -> Result<(), Box<dyn Error>> {
                         ))
                 };
 
-                let ram_text =
-                    get_ram_text(&cpu, ram_rect_inner_width, main_rect_inner_height);
+                let zero_page_text = get_ram_page_text(
+                    &cpu,
+                    0,
+                    ram_rect_inner_width,
+                    main_rect_inner_height,
+                );
                 let zero_page_rect = {
                     let mut rect = ram_rect.clone();
-                    rect.height = ram_text.len() as u16 + 2;
+                    rect.height = zero_page_text.len() as u16 + 2;
                     rect
                 };
 
-                // RAM
+                // Zero Page RAM
                 frame.render_widget(
-                    Paragraph::new(ram_text)
+                    Paragraph::new(zero_page_text)
                         .block(create_block("Zero Page RAM"))
                         .alignment(Alignment::Left),
                     zero_page_rect,
+                );
+
+                let stack_page_text = get_ram_page_text(
+                    &cpu,
+                    0x01,
+                    ram_rect_inner_width,
+                    main_rect_inner_height,
+                );
+                let stack_page_rect = {
+                    let mut rect = ram_rect.clone();
+                    rect.y = zero_page_rect.height;
+                    rect.height = stack_page_text.len() as u16 + 2;
+                    rect
+                };
+                // Stack Page RAM
+                frame.render_widget(
+                    Paragraph::new(stack_page_text)
+                        .block(create_block("Stack Page RAM"))
+                        .alignment(Alignment::Left),
+                    stack_page_rect,
                 );
 
                 // Instructions.
@@ -438,7 +465,12 @@ fn get_instructions_text<'a>(
     spans_list
 }
 
-fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> {
+fn get_ram_page_text(
+    cpu: &Cpu6502,
+    page_u8: u8,
+    width: u16,
+    _height: u16,
+) -> Vec<Spans<'static>> {
     let mut spans = vec![];
     let bus = cpu.bus.borrow();
     let style = Style::default();
@@ -446,10 +478,10 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     let dim_white = style.fg(DIM_WHITE);
 
     // Decide how many columns to make.
-    let col_width = "$00 0011 2233 4455 6677 8899 aabb ccdd eeff ".len();
+    let col_width = "$0000 0011 2233 4455 6677 8899 aabb ccdd eeff ".len();
     let cols = (width / col_width as u16).max(1);
 
-    // Compute the zero page view.
+    // Compute the page view.
     // e.g.
     // $0000 0011 2233 4455 6677 8899 aabb ccdd eeff
     // $0010 0011 2233 4455 6677 8899 aabb ccdd eeff
@@ -458,18 +490,19 @@ fn get_ram_text(cpu: &Cpu6502, width: u16, _height: u16) -> Vec<Spans<'static>> 
     // $00F0 0011 2233 4455 6677 8899 aabb ccdd eeff
 
     spans.push(Spans::from(Span::styled(
-        "    0011 2233 4455 6677 8899 aabb ccdd eeff ".repeat(cols as usize),
-        //   0011 2233 4455 6677 8899 aabb ccdd eeff
+        "       0 1  2 3  4 5  6 7  8 9  a b  c d  e f ".repeat(cols as usize),
+        //     0011 2233 4455 6677 8899 aabb ccdd eeff
         style.fg(MAGENTA),
     )));
 
     let mut parts = vec![];
+    let page_u16: u16 = (page_u8 as u16) << 8;
     for i in 0..16 {
         // $00 0011 2233 4455 6677 8899 aabb ccdd eeff
         // ^^^
-        parts.push(Span::styled(format!("${:x}0 ", i), cyan));
+        parts.push(Span::styled(format!("${:02x}{:x}_ ", page_u8, i), cyan));
         for j in 0..8 {
-            let [le, be] = bus.read_u16(i * 16 + j * 2).to_le_bytes();
+            let [le, be] = bus.read_u16(page_u16 + i * 16 + j * 2).to_le_bytes();
             // $0000 0011 2233 4455 6677 8899 aabb ccdd eeff
             //       ^^^^
             parts.push(Span::styled(format!("{:02x}{:02x} ", le, be), {
