@@ -131,8 +131,8 @@ pub fn rti(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Function: (S)-:=PC PC:={adr}
 /// Flags:
 pub fn jsr(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    cpu.push_stack_u16(cpu.pc);
     let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    cpu.push_stack_u16(cpu.pc);
     cpu.pc = address;
 }
 
