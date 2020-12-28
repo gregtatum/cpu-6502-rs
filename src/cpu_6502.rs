@@ -420,7 +420,12 @@ impl Cpu6502 {
     fn push_stack_u16(&mut self, value: u16) {
         let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
         // The stack points to the next available memory.
-        self.bus.borrow_mut().set_u16(address, value);
+        self.bus.borrow_mut().set_u16(
+            // An additional byte is needed to store a u16. Subtract since the stack
+            // grows down.
+            address.wrapping_sub(1),
+            value,
+        );
         // Grow down only after setting the memory.
         self.s = self.s.wrapping_sub(2);
     }
@@ -429,10 +434,10 @@ impl Cpu6502 {
     /// See the "S" register for more details.
     fn pull_stack_u16(&mut self) -> u16 {
         // The current stack pointer points at available memory, decrement it first.
-        self.s = self.s.wrapping_add(2);
+        self.s = self.s.wrapping_add(1);
         // Now read out the memory that is being pulled.
-        let stack_page = 0x01;
-        let address = u16::from_le_bytes([self.s, stack_page]);
+        let address = u16::from_le_bytes([self.s, memory_range::STACK_PAGE]);
+        self.s = self.s.wrapping_add(1);
         self.bus.borrow().read_u16(address)
     }
 
