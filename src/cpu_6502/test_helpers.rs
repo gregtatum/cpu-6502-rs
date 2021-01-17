@@ -19,7 +19,7 @@ pub fn run_program(text: &str) -> Cpu6502 {
 
     match lexer.parse() {
         Ok(_) => {
-            let BytesLabels { mut bytes, .. } = lexer.to_bytes().unwrap();
+            let BytesLabels { mut bytes, .. } = lexer.into_bytes().unwrap();
             bytes.push(OpCode::KIL as u8);
             let mut cpu = Cpu6502::new({
                 let bus = Bus::new_shared_bus();

@@ -977,7 +977,7 @@ pub const ADDRESSING_MODE_TABLE: [Mode; 256] = [
     Mode::AbsoluteIndexedX,
 ];
 
-pub const OPCODE_STRING_TABLE: [&'static str; 256] = [
+pub const OPCODE_STRING_TABLE: [&str; 256] = [
     "brk", "ora", "kil", "slo", "nop", "ora", "asl", "slo", "php", "ora", "asl", "anc",
     "nop", "ora", "asl", "slo", "bpl", "ora", "kil", "slo", "nop", "ora", "asl", "slo",
     "clc", "ora", "nop", "slo", "nop", "ora", "asl", "slo", "jsr", "and", "kil", "rla",

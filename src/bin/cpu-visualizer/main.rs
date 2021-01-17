@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     main_rect_inner_height,
                 );
                 let zero_page_rect = {
-                    let mut rect = ram_rect.clone();
+                    let mut rect = ram_rect;
                     rect.height = zero_page_text.len() as u16 + 2;
                     rect
                 };
@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     main_rect_inner_height,
                 );
                 let stack_page_rect = {
-                    let mut rect = ram_rect.clone();
+                    let mut rect = ram_rect;
                     rect.y = zero_page_rect.height;
                     rect.height = stack_page_text.len() as u16 + 2;
                     rect
@@ -189,8 +189,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
                 // Skip through instructions much quicker.
-                Key::Char(c) => match c.to_digit(10) {
-                    Some(n) => {
+                Key::Char(c) => {
+                    if let Some(n) = c.to_digit(10) {
                         if n != 0 {
                             for _ in 0..((n + 1).pow(2)) {
                                 if !cpu.tick() {
@@ -199,8 +199,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             }
                         }
                     }
-                    None => {}
-                },
+                }
                 _ => {}
             }
         }
@@ -311,28 +310,25 @@ fn get_instructions_text<'a>(
         // label:
         // ^^^^^^
         //   $4027 clc
-        match address_to_label.get(&pc) {
-            Some(pc_label) => {
-                let mut span =
-                    Span::styled(format!("{}: ", pc_label), base_style.fg(MAGENTA));
+        if let Some(pc_label) = address_to_label.get(&pc) {
+            let mut span =
+                Span::styled(format!("{}: ", pc_label), base_style.fg(MAGENTA));
 
-                // Is this selected?
-                if i == 0 {
-                    // Remember this for in the list of executed instructions.
-                    let mut dim_span = span.clone();
-                    dim_span.style = base_style.fg(GRAY);
-                    executed_instructions.push_front(Spans::from(dim_span));
+            // Is this selected?
+            if i == 0 {
+                // Remember this for in the list of executed instructions.
+                let mut dim_span = span.clone();
+                dim_span.style = base_style.fg(GRAY);
+                executed_instructions.push_front(Spans::from(dim_span));
 
-                    // Bold the current label too.
-                    span.style = span.style.clone().add_modifier(Modifier::BOLD);
-                }
-
-                spans_list.push(Spans::from(span));
+                // Bold the current label too.
+                span.style = span.style.clone().add_modifier(Modifier::BOLD);
             }
-            None => {}
+
+            spans_list.push(Spans::from(span));
         };
 
-        let instruction_pc = pc.clone();
+        let instruction_pc = pc;
 
         // label:
         //   $4027 clc
@@ -376,17 +372,14 @@ fn get_instructions_text<'a>(
 
                 //   $4023 jmp section2 $4029
                 //             ^^^^^^^^
-                match address_to_label.get(&value) {
-                    Some(label) => {
-                        parts.push(Span::styled(
-                            format!(" {}", label),
-                            base_style.fg(MAGENTA),
-                        ));
-                        // Dim out the address.
-                        address_style = base_style.fg(GRAY);
-                    }
-                    None => {}
-                }
+                if let Some(label) = address_to_label.get(&value) {
+                    parts.push(Span::styled(
+                        format!(" {}", label),
+                        base_style.fg(MAGENTA),
+                    ));
+                    // Dim out the address.
+                    address_style = base_style.fg(GRAY);
+                };
 
                 if mode == Mode::Indirect {
                     //   $4023 jmp ($4029)
@@ -519,7 +512,7 @@ fn get_ram_page_text(
             parts.clear();
         }
     }
-    if parts.len() > 0 {
+    if !parts.is_empty() {
         spans.push(Spans::from(parts.clone()));
     }
 
@@ -549,7 +542,7 @@ fn load_cpu() -> (Cpu6502, AddressToLabel) {
             let BytesLabels {
                 mut bytes,
                 address_to_label,
-            } = lexer.to_bytes().unwrap();
+            } = lexer.into_bytes().unwrap();
             bytes.push(OpCode::KIL as u8);
             (
                 Cpu6502::new({

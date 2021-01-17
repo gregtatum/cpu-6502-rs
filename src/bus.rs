@@ -41,7 +41,7 @@ impl Bus {
             return memory_range::PPU.min + (memory_range::PPU_ACTUAL.size() & address);
         }
 
-        return address;
+        address
     }
 
     pub fn read_u8(&self, address: u16) -> u8 {
@@ -82,7 +82,7 @@ impl Bus {
         self.memory[mapped_address + 1] = be;
     }
 
-    pub fn load_program(&mut self, program: &Vec<u8>) {
+    pub fn load_program(&mut self, program: &[u8]) {
         if program.len() > memory_range::CARTRIDGE_SPACE.size() as usize {
             panic!(
                 "Attempting to load a program that is larger than the cartridge space."

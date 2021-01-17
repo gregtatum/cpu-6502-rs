@@ -114,18 +114,10 @@ impl Mapper001 {
             }
         };
 
-        let program_rom = {
-            let mut vec = Vec::with_capacity(header.prg_rom_bytes as usize);
-            vec.resize(header.prg_rom_bytes as usize, 0);
-            vec
-        };
-
-        let last_bank = header.prg_rom_banks - 1;
-
         Ok(Mapper001 {
             ram,
-            program_rom,
-            last_bank,
+            program_rom: vec![0; header.prg_rom_bytes as usize],
+            last_bank: header.prg_rom_banks - 1,
             shift_register: 0,
             shift_register_address: 0,
             shift_register_bits_shifted: 0,
@@ -151,7 +143,7 @@ impl Mapper001 {
     fn read_prg_bank(&self, bank: u8, absolute_addr: u16) -> u8 {
         *self
             .program_rom
-            .get((bank as u16 * 0x4000 + absolute_addr & BANK_MASK) as usize)
+            .get(((bank as u16) * 0x4000 + (absolute_addr & BANK_MASK)) as usize)
             .expect("The mapper is going out of bounds")
     }
 }
@@ -216,12 +208,9 @@ impl Mapper for Mapper001 {
         match addr {
             0x6000..=0x7fff => {
                 // 8 KB PRG RAM bank, (optional)
-                match self.ram {
-                    Some(ref mut ram) => {
-                        // Map $6000-$7FFF to $0000-$1FFF
-                        ram[(addr & RAM_MASK) as usize] = value;
-                    }
-                    None => {}
+                if let Some(ref mut ram) = self.ram {
+                    // Map $6000-$7FFF to $0000-$1FFF
+                    ram[(addr & RAM_MASK) as usize] = value;
                 }
             }
             0x8000..=0xffff => {

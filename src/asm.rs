@@ -70,7 +70,7 @@ impl LabelTable {
         }
     }
 
-    pub fn index(&mut self, string: &String) -> StringIndex {
+    pub fn index(&mut self, string: &str) -> StringIndex {
         match self.strings.iter().position(|s| s == string) {
             Some(index) => index,
             None => {
@@ -131,7 +131,7 @@ fn char_to_enum(character: &char) -> Character {
     if character.is_whitespace() {
         return Character::Whitespace;
     }
-    return Character::Value(character.clone());
+    Character::Value(*character)
 }
 
 // This is convenience sugar over peeking and matching an enum.
@@ -187,7 +187,7 @@ impl ParseError {
             nice_message.push_str(&format!("{}", &col_string.cyan()));
 
             nice_message.push_str(&format!("{}", &row_text.bright_white()));
-            nice_message.push_str("\n");
+            nice_message.push('\n');
 
             if row_index == error_row_index {
                 let indent = " ".repeat((parser.column + 5) as usize);
@@ -197,10 +197,10 @@ impl ParseError {
                 );
                 nice_message.push_str(&indent);
                 nice_message.push_str(&format!("{}", error_message.bright_red()));
-                nice_message.push_str("\n");
+                nice_message.push('\n');
                 nice_message.push_str(&indent);
                 nice_message.push_str(&format!("{}", message.bright_red()));
-                nice_message.push_str("\n");
+                nice_message.push('\n');
             }
         }
 
@@ -268,9 +268,9 @@ impl<'a> AsmLexer<'a> {
             match self.lines.next() {
                 Some(line) => {
                     self.characters = IntoIterator::into_iter(line.chars()).peekable();
-                    match self.parse_root_level() {
-                        Err(message) => return Err(ParseError::new(message, self)),
-                        _ => {}
+
+                    if let Err(message) = self.parse_root_level() {
+                        return Err(ParseError::new(message, self));
                     }
                 }
                 None => {
@@ -333,12 +333,8 @@ impl<'a> AsmLexer<'a> {
         }
     }
 
-    pub fn to_tokens(self) -> Vec<Token> {
-        self.tokens
-    }
-
-    pub fn to_bytes(mut self) -> Result<BytesLabels, String> {
-        let mut bytes = self.to_bytes_before_labels()?;
+    pub fn into_bytes(mut self) -> Result<BytesLabels, String> {
+        let mut bytes = self.as_bytes_before_labels()?;
 
         // Consume self to move the data we still care about, at the end, the rest
         // of the data will be dropped.
@@ -361,9 +357,10 @@ impl<'a> AsmLexer<'a> {
                         + 1;
 
                     if offset > 127 || offset < -128 {
-                        return Err(format!(
+                        return Err(
                             "A relative label was used too far away to be generated."
-                        ));
+                                .into(),
+                        );
                     }
 
                     // Take only the least significant byte of the offset, which really
@@ -384,28 +381,24 @@ impl<'a> AsmLexer<'a> {
         // Convert the labels to a HashMap data structure that makes it easy to go
         // from an address to the string. This new data structure will own the strings.
         let mut address_to_label: AddressToLabel = HashMap::new();
-        match labels.addresses {
-            Some(addresses) => {
-                for string_index in 0..labels.strings.len() {
-                    let address =
-                        addresses.get(string_index).expect("Unable to get address");
+        if let Some(addresses) = labels.addresses {
+            for string_index in 0..labels.strings.len() {
+                let address = addresses.get(string_index).expect("Unable to get address");
 
-                    // Take ownership of the string.
-                    let old_string = labels
-                        .strings
-                        .get_mut(string_index)
-                        .expect("Unable to get string");
-                    let mut new_string = String::with_capacity(0);
+                // Take ownership of the string.
+                let old_string = labels
+                    .strings
+                    .get_mut(string_index)
+                    .expect("Unable to get string");
+                let mut new_string = String::with_capacity(0);
 
-                    std::mem::swap(&mut new_string, old_string);
+                std::mem::swap(&mut new_string, old_string);
 
-                    address_to_label.insert(
-                        *address as u16 + memory_range::CARTRIDGE_SPACE.min,
-                        new_string,
-                    );
-                }
+                address_to_label.insert(
+                    *address as u16 + memory_range::CARTRIDGE_SPACE.min,
+                    new_string,
+                );
             }
-            None => {}
         }
 
         Ok(BytesLabels {
@@ -414,81 +407,78 @@ impl<'a> AsmLexer<'a> {
         })
     }
 
-    fn to_bytes_before_labels(&mut self) -> Result<Vec<u8>, String> {
+    fn as_bytes_before_labels(&mut self) -> Result<Vec<u8>, String> {
         let mut bytes: Vec<u8> = Vec::new();
         let mut tokens = self.tokens.iter().peekable();
-        loop {
-            match tokens.next() {
-                Some(token) => match token {
-                    Token::Instruction(instruction) => match tokens.peek() {
-                        Some(Token::LabelOperand(string_index)) => {
-                            match instruction {
-                                Instruction::BPL
-                                | Instruction::BMI
-                                | Instruction::BVC
-                                | Instruction::BVS
-                                | Instruction::BCC
-                                | Instruction::BCS
-                                | Instruction::BNE
-                                | Instruction::BEQ => {
-                                    // labelname:
-                                    //   clc
-                                    //   bcc labelname; branch using a relative instruction
-                                    //   ^^^ ^^^^^^^^^
-                                    //   |   |
-                                    //   |   relative label
-                                    //   instruction
-                                    let opcode = instruction_mode_to_op_code(
-                                        instruction,
-                                        &TokenMode::Relative,
-                                    )?;
+        while let Some(token) = tokens.next() {
+            match token {
+                Token::Instruction(instruction) => match tokens.peek() {
+                    Some(Token::LabelOperand(string_index)) => {
+                        match instruction {
+                            Instruction::BPL
+                            | Instruction::BMI
+                            | Instruction::BVC
+                            | Instruction::BVS
+                            | Instruction::BCC
+                            | Instruction::BCS
+                            | Instruction::BNE
+                            | Instruction::BEQ => {
+                                // labelname:
+                                //   clc
+                                //   bcc labelname; branch using a relative instruction
+                                //   ^^^ ^^^^^^^^^
+                                //   |   |
+                                //   |   relative label
+                                //   instruction
+                                let opcode = instruction_mode_to_op_code(
+                                    instruction,
+                                    &TokenMode::Relative,
+                                )?;
 
-                                    bytes.push(opcode as u8);
+                                bytes.push(opcode as u8);
 
-                                    // Go back and fill this label in with a relative address.
-                                    self.labels.addresses_to_label.push((
-                                        *string_index,
-                                        bytes.len(),
-                                        LabelMappingType::Relative,
-                                    ));
+                                // Go back and fill this label in with a relative address.
+                                self.labels.addresses_to_label.push((
+                                    *string_index,
+                                    bytes.len(),
+                                    LabelMappingType::Relative,
+                                ));
 
-                                    // Push on a u8 address which will be filled in later.
-                                    bytes.push(0);
-                                    tokens.next();
-                                }
-                                _ => {
-                                    let opcode = instruction_mode_to_op_code(
-                                        instruction,
-                                        &TokenMode::Absolute,
-                                    )?;
-                                    bytes.push(opcode as u8);
+                                // Push on a u8 address which will be filled in later.
+                                bytes.push(0);
+                                tokens.next();
+                            }
+                            _ => {
+                                let opcode = instruction_mode_to_op_code(
+                                    instruction,
+                                    &TokenMode::Absolute,
+                                )?;
+                                bytes.push(opcode as u8);
 
-                                    // Go back and fill this label in.
-                                    self.labels.addresses_to_label.push((
-                                        *string_index,
-                                        bytes.len(),
-                                        LabelMappingType::Absolute,
-                                    ));
+                                // Go back and fill this label in.
+                                self.labels.addresses_to_label.push((
+                                    *string_index,
+                                    bytes.len(),
+                                    LabelMappingType::Absolute,
+                                ));
 
-                                    // Push on a u16 address which will be filled in later.
-                                    bytes.push(0);
-                                    bytes.push(0);
-                                    tokens.next();
-                                }
-                            };
-                        }
-                        Some(Token::Mode(mode)) => {
-                            bytes.push(
-                                instruction_mode_to_op_code(instruction, mode)? as u8
-                            );
-                            tokens.next();
+                                // Push on a u16 address which will be filled in later.
+                                bytes.push(0);
+                                bytes.push(0);
+                                tokens.next();
+                            }
+                        };
+                    }
+                    Some(Token::Mode(mode)) => {
+                        bytes.push(instruction_mode_to_op_code(instruction, mode)? as u8);
+                        tokens.next();
 
-                            match mode {
-                                TokenMode::Absolute
-                                | TokenMode::AbsoluteIndexedX
-                                | TokenMode::AbsoluteIndexedY
-                                | TokenMode::Indirect => {
-                                    match tokens.next() {
+                        match mode {
+                            TokenMode::Absolute
+                            | TokenMode::AbsoluteIndexedX
+                            | TokenMode::AbsoluteIndexedY
+                            | TokenMode::Indirect => {
+                                match tokens.next() {
                                         Some(Token::U16(value)) => {
                                             let [le, be] = value.to_le_bytes();
                                             bytes.push(le);
@@ -501,53 +491,51 @@ impl<'a> AsmLexer<'a> {
                                             "Expected a u16 to be the operand of an operation, but found nothing".to_string()
                                         )
                                     };
-                                }
-                                TokenMode::ZeroPageOrRelative
-                                | TokenMode::Relative
-                                | TokenMode::ZeroPageX
-                                | TokenMode::ZeroPageY
-                                | TokenMode::Immediate
-                                | TokenMode::IndirectX
-                                | TokenMode::IndirectY => {
-                                    match tokens.next() {
+                            }
+                            TokenMode::ZeroPageOrRelative
+                            | TokenMode::Relative
+                            | TokenMode::ZeroPageX
+                            | TokenMode::ZeroPageY
+                            | TokenMode::Immediate
+                            | TokenMode::IndirectX
+                            | TokenMode::IndirectY => {
+                                match tokens.next() {
                                         Some(Token::U8(value)) => bytes.push(*value),
                                         Some(token) => return Err(format!("Expected a u8 to be the operand of an operation, but found a: {:#x?}", token)),
                                         None => return Err("Expected a u8 to be the operand of an operation, but found nothing".to_string())
                                     };
-                                }
-                                TokenMode::Implied | TokenMode::None => {}
                             }
+                            TokenMode::Implied | TokenMode::None => {}
                         }
-                        _ => {
-                            bytes.push(instruction_mode_to_op_code(
-                                instruction,
-                                &TokenMode::None,
-                            )? as u8);
-                        }
-                    },
-                    Token::LabelDefinition(string_index) => {
-                        self.labels.set_address(bytes.len(), *string_index);
                     }
-                    Token::LabelOperand(string_index) => {
-                        return Err(format!(
+                    _ => {
+                        bytes.push(instruction_mode_to_op_code(
+                            instruction,
+                            &TokenMode::None,
+                        )? as u8);
+                    }
+                },
+                Token::LabelDefinition(string_index) => {
+                    self.labels.set_address(bytes.len(), *string_index);
+                }
+                Token::LabelOperand(string_index) => {
+                    return Err(format!(
                             "Unexpected LabelOperand operand found. Operands are assumed to follow instructions: {:#x?}",
                             self.labels.strings.get(*string_index).unwrap()
                         ));
-                    }
-                    Token::U8(value) => bytes.push(*value),
-                    Token::U16(value) => {
-                        let [le, be] = value.to_le_bytes();
-                        bytes.push(le);
-                        bytes.push(be);
-                    }
-                    token => {
-                        return Err(format!(
-                            "Unexpected token at the root level: {:#x?}",
-                            token
-                        ))
-                    }
-                },
-                None => break,
+                }
+                Token::U8(value) => bytes.push(*value),
+                Token::U16(value) => {
+                    let [le, be] = value.to_le_bytes();
+                    bytes.push(le);
+                    bytes.push(be);
+                }
+                token => {
+                    return Err(format!(
+                        "Unexpected token at the root level: {:#x?}",
+                        token
+                    ))
+                }
             }
         }
         Ok(bytes)
@@ -570,7 +558,7 @@ impl<'a> AsmLexer<'a> {
             },
             value => return Err(format!("Unknown character when expecting a comma or semi-colon \"{:?}\"", value))
         });
-        return Ok(false);
+        Ok(false)
     }
 
     fn skip_whitespace(&mut self) {
@@ -908,19 +896,15 @@ impl<'a> AsmLexer<'a> {
             Instruction::PLP => Ok(()),
             Instruction::PHP => Ok(()),
             Instruction::KIL => Ok(()),
-            _ => {
-                Err(format!("Instruction {:?} expected an operand", instruction)
-                    .to_string())
-            }
+            _ => Err(format!("Instruction {:?} expected an operand", instruction)),
         }
     }
 
     fn ignore_comment_contents(&mut self) -> Result<(), String> {
         loop {
             // This effectively runs ".last()" without consuming the iterator.
-            match self.next_character() {
-                None => return Ok(()),
-                _ => {}
+            if self.next_character().is_none() {
+                return Ok(());
             };
         }
     }
@@ -949,11 +933,9 @@ impl<'a> AsmLexer<'a> {
 
     fn get_word(&mut self, starting_char: Option<&char>) -> Result<String, String> {
         let mut word = String::new();
-        match starting_char {
-            Some(starting_char) => {
-                word.push(*starting_char);
-            }
-            None => {}
+
+        if let Some(starting_char) = starting_char {
+            word.push(*starting_char);
         }
 
         iter_peek_match!(self.characters, character => {
@@ -962,14 +944,14 @@ impl<'a> AsmLexer<'a> {
                 self.next_character();
             },
             value => {
-                if word.len() == 0 {
+                if word.is_empty() {
                     return Err(format!("Expected to find an alpha-numeric value, but instead found {:?}", value));
                 }
                 break
             },
         });
 
-        return Ok(word);
+        Ok(word)
     }
 }
 #[cfg(test)]
@@ -983,7 +965,7 @@ mod test {
 
             match parser.parse() {
                 Ok(_) => {
-                    let BytesLabels { bytes, .. } = parser.to_bytes().unwrap();
+                    let BytesLabels { bytes, .. } = parser.into_bytes().unwrap();
                     // Here's the biggest reason for the macro, this will add the `as u8`
                     // to the bytes generated.
                     assert_eq!(vec![$( $bytes as u8, )*], bytes);

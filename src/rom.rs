@@ -114,7 +114,7 @@ impl ROM {
         // at the end of the file.
         let mut title = Vec::new();
         file.read_to_end(&mut title)?;
-        if title.len() != 0 {
+        if !title.is_empty() {
             eprintln!("Found some information at the end of the file.");
         }
 
@@ -215,7 +215,7 @@ fn process_header(header: &[u8]) -> Result<Header, ROMLoadError> {
 
     // 11-15: Unused padding (should be filled with zero, but some rippers put their name across bytes 7-15)
 
-    return Ok(Header {
+    Ok(Header {
         prg_rom_banks,
         prg_rom_bytes,
         character_rom_banks,
@@ -231,7 +231,7 @@ fn process_header(header: &[u8]) -> Result<Header, ROMLoadError> {
         prg_ram_size,
         tv_system_rarely_used,
         tv_system,
-    });
+    })
 }
 
 fn read_bytes(file: &mut File, size: usize) -> Result<Vec<u8>, io::Error> {

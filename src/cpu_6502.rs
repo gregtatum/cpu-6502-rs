@@ -187,9 +187,7 @@ impl Cpu6502 {
             // this is 4C 32 40, here 4C is the opcode. The 6502 is a little endian machine,
             // so any 16 bit (2 byte) value is stored with the LSB first. All instructions
             // that use absolute addressing are 3 bytes including the opcode.
-            Mode::Absolute => {
-                return self.next_u16();
-            }
+            Mode::Absolute => self.next_u16(),
             // Absolute indexing gets the target address by adding the contents of the X or Y
             // register to an absolute address. For example, this 6502 code can be used
             // to fill 10 bytes with $FF starting at address $1009, counting down to
@@ -209,7 +207,7 @@ impl Cpu6502 {
                     offset_address,
                     page_boundary_cycle,
                 );
-                return offset_address;
+                offset_address
             }
             Mode::AbsoluteIndexedY => {
                 let base_address = self.next_u16();
@@ -219,7 +217,7 @@ impl Cpu6502 {
                     offset_address,
                     page_boundary_cycle,
                 );
-                return offset_address;
+                offset_address
             }
             // These instructions have their data defined as the next byte after the
             // opcode. ORA #$B2 will perform a logical (also called bitwise) of the
@@ -231,7 +229,7 @@ impl Cpu6502 {
                 // the program counter.
                 let address = self.pc;
                 self.pc += 1;
-                return address;
+                address
             }
             // In an implied instruction, the data and/or destination is mandatory for
             // the instruction. For example, the CLC instruction is implied, it is going

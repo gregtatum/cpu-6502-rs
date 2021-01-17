@@ -1,5 +1,7 @@
 // Remove this once this is a bit more mature.
 #![allow(dead_code)]
+// Clippy rules to disable.
+#![allow(clippy::new_without_default)]
 
 pub mod asm;
 pub mod bus;
