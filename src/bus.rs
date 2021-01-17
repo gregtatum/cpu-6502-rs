@@ -27,7 +27,7 @@ impl Bus {
     // The NES address range is larger than the actual bits that are pointed
     // at. This function maps the address to the actual bit range.
     fn map_address(&self, address: u16) -> u16 {
-        if address <= memory_range::RAM.max {
+        if address < memory_range::RAM.end {
             // $0000-$07FF  $0800  2KB internal RAM
             // $0800-$0FFF  $0800  Mirrors of $0000-$07FF
             // $1000-$17FF  $0800
@@ -35,10 +35,10 @@ impl Bus {
             return memory_range::RAM_ACTUAL.size() & address;
         }
 
-        if address <= memory_range::PPU.max {
+        if address < memory_range::PPU.end {
             // $2000-$2007  $0008  NES PPU registers
             // $2008-$3FFF  $1FF8  Mirrors of $2000-2007 (repeats every 8 bytes)
-            return memory_range::PPU.min + (memory_range::PPU_ACTUAL.size() & address);
+            return memory_range::PPU.start + (memory_range::PPU_ACTUAL.size() & address);
         }
 
         address
@@ -91,14 +91,14 @@ impl Bus {
 
         // Copy the memory into the buffer.
         for (index, value) in program.iter().enumerate() {
-            self.memory[memory_range::CARTRIDGE_SPACE.min as usize + index] = *value;
+            self.memory[memory_range::CARTRIDGE_SPACE.start as usize + index] = *value;
         }
 
         // TODO - For now set the start of the execution to the beginning byte of
         // the program.
         self.set_u16(
             InterruptVectors::ResetVector as u16,
-            memory_range::CARTRIDGE_SPACE.min,
+            memory_range::CARTRIDGE_SPACE.start,
         );
     }
 }

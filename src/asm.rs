@@ -369,7 +369,7 @@ impl<'a> AsmLexer<'a> {
                 }
                 LabelMappingType::Absolute => {
                     let label_value_u16 = labels.get_address(*string_index)? as u16
-                        + memory_range::CARTRIDGE_SPACE.min;
+                        + memory_range::CARTRIDGE_SPACE.start;
 
                     let [low, high] = label_value_u16.to_le_bytes();
                     bytes[*byte_offset] = low;
@@ -395,7 +395,7 @@ impl<'a> AsmLexer<'a> {
                 std::mem::swap(&mut new_string, old_string);
 
                 address_to_label.insert(
-                    *address as u16 + memory_range::CARTRIDGE_SPACE.min,
+                    *address as u16 + memory_range::CARTRIDGE_SPACE.start,
                     new_string,
                 );
             }
