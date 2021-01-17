@@ -19,16 +19,29 @@ pub struct Bus {
 impl Bus {
     pub fn new_shared_bus() -> Rc<RefCell<Bus>> {
         Rc::new(RefCell::new(Bus {
-            // Little endian memory store.
+            // Little endian memory store, 2 kilobytes in size.
             memory: [0; 0xFFFF],
         }))
     }
 
+    // The NES address range is larger than the actual bits that are pointed
+    // at. This function maps the address to the actual bit range.
     fn map_address(&self, address: u16) -> u16 {
-        match address {
-            0x2000..=0x3fff => 0x2000 + (address % 8),
-            _ => address,
+        if address <= memory_range::RAM.max {
+            // $0000-$07FF  $0800  2KB internal RAM
+            // $0800-$0FFF  $0800  Mirrors of $0000-$07FF
+            // $1000-$17FF  $0800
+            // $1800-$1FFF  $0800
+            return memory_range::RAM_ACTUAL.size() & address;
         }
+
+        if address <= memory_range::PPU.max {
+            // $2000-$2007  $0008  NES PPU registers
+            // $2008-$3FFF  $1FF8  Mirrors of $2000-2007 (repeats every 8 bytes)
+            return memory_range::PPU.min + (memory_range::PPU_ACTUAL.size() & address);
+        }
+
+        return address;
     }
 
     pub fn read_u8(&self, address: u16) -> u8 {
@@ -59,13 +72,14 @@ impl Bus {
     }
 
     pub fn set_u8(&mut self, address: u16, value: u8) {
-        self.memory[address as usize] = value;
+        self.memory[self.map_address(address) as usize] = value;
     }
 
     pub fn set_u16(&mut self, address: u16, value: u16) {
         let [le, be] = value.to_le_bytes();
-        self.memory[address as usize] = le;
-        self.memory[address as usize + 1] = be;
+        let mapped_address = self.map_address(address) as usize;
+        self.memory[mapped_address] = le;
+        self.memory[mapped_address + 1] = be;
     }
 
     pub fn load_program(&mut self, program: &Vec<u8>) {
