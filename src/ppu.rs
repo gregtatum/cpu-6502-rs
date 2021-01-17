@@ -4,6 +4,18 @@
 /// Then 2kb for maps and other things.
 use crate::bus::SharedBus;
 
+// Frame size:
+// 341 × 261
+// Scanlines: 342
+// Cycles: 261
+
+// Palette information: https://wiki.nesdev.com/w/index.php/PPU_palettes
+
+// Implement:
+// Pattern memory   - holds the sprites
+// Nametable memory - holds tile layout
+// Palette memory   - holds color info
+
 enum PpuRegister {
     /// PPU control register - Write only
     Ctrl = 0x2000,
@@ -52,7 +64,7 @@ enum PpuCtrl {
     N = 0b0000_0011,
 }
 
-/// This register controls the rendering of sprites and backgrounds, as well as colour effects.
+/// This register controls the rendering of sprites and backgrounds, as well as color effects.
 ///
 /// https://wiki.nesdev.com/w/index.php/PPU_registers#PPUMASK
 ///

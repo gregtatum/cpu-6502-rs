@@ -8,3 +8,4 @@ pub mod cpu_6502;
 pub mod emulator;
 pub mod opcodes;
 pub mod ppu;
+pub mod rom;
