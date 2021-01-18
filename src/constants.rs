@@ -50,6 +50,11 @@ pub mod memory_range {
         end: 0xFFFF,
     };
 
+    pub const PRG_ROM: Range = Range {
+        start: 0x8000,
+        end: 0xFFFF,
+    };
+
     pub const STACK_PAGE: u8 = 0x01;
 }
 

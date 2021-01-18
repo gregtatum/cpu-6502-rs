@@ -1,8 +1,11 @@
 #![macro_use]
 
-use crate::asm::{AsmLexer, BytesLabels};
 use crate::bus::Bus;
 use crate::cpu_6502::*;
+use crate::{
+    asm::{AsmLexer, BytesLabels},
+    mappers::SimpleProgram,
+};
 
 pub const P: u8 = RESET_STATUS_FLAG;
 pub const C: u8 = StatusFlag::Carry as u8;
@@ -21,11 +24,8 @@ pub fn run_program(text: &str) -> Cpu6502 {
         Ok(_) => {
             let BytesLabels { mut bytes, .. } = lexer.into_bytes().unwrap();
             bytes.push(OpCode::KIL as u8);
-            let mut cpu = Cpu6502::new({
-                let bus = Bus::new_shared_bus();
-                bus.borrow_mut().load_program(&bytes);
-                bus
-            });
+            let mut cpu =
+                Cpu6502::new(Bus::new_shared_bus(Box::new(SimpleProgram::load(&bytes))));
 
             cpu.run();
             cpu

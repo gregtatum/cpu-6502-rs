@@ -1,4 +1,6 @@
-use super::constants::{memory_range, InterruptVectors};
+use crate::mappers::Mapper;
+
+use super::constants::memory_range;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -13,43 +15,59 @@ use std::rc::Rc;
 pub type SharedBus = Rc<RefCell<Bus>>;
 
 pub struct Bus {
-    memory: [u8; 0xFFFF],
+    // Includes the zero page, stack, and ram.
+    //
+    // $2000 |-------------------------|-------------------------| $2000
+    //       |   Mirrors $0000 - $07FF |                         |
+    // $0800 |-------------------------|                         |
+    //       |   General RAM           |                         |
+    // $0200 |-------------------------|           RAM           |
+    //       |   Stack                 |                         |
+    // $0100 |-------------------------|                         |
+    //       |   Zero Page             |                         |
+    // $0000 |-------------------------|-------------------------| $0000
+    ram: [u8; memory_range::RAM.end as usize],
+    cartridge: Box<dyn Mapper>,
 }
 
 impl Bus {
-    pub fn new_shared_bus() -> Rc<RefCell<Bus>> {
+    pub fn new_shared_bus(cartridge: Box<dyn Mapper>) -> Rc<RefCell<Bus>> {
         Rc::new(RefCell::new(Bus {
             // Little endian memory store, 2 kilobytes in size.
-            memory: [0; 0xFFFF],
+            ram: [0; memory_range::RAM.end as usize],
+            cartridge,
         }))
     }
 
     // The NES address range is larger than the actual bits that are pointed
     // at. This function maps the address to the actual bit range.
-    fn map_address(&self, address: u16) -> u16 {
+    fn map_ram_address(&self, address: u16) -> u16 {
         if address < memory_range::RAM.end {
             // $0000-$07FF  $0800  2KB internal RAM
             // $0800-$0FFF  $0800  Mirrors of $0000-$07FF
             // $1000-$17FF  $0800
             // $1800-$1FFF  $0800
-            return memory_range::RAM_ACTUAL.size() & address;
+            return memory_range::RAM_ACTUAL.mask() & address;
         }
 
         if address < memory_range::PPU.end {
             // $2000-$2007  $0008  NES PPU registers
             // $2008-$3FFF  $1FF8  Mirrors of $2000-2007 (repeats every 8 bytes)
-            return memory_range::PPU.start + (memory_range::PPU_ACTUAL.size() & address);
+            return memory_range::PPU.start + (memory_range::PPU_ACTUAL.mask() & address);
         }
 
         address
     }
 
     pub fn read_u8(&self, address: u16) -> u8 {
-        self.memory[self.map_address(address) as usize]
+        if let Some(value) = self.cartridge.read_cpu(address) {
+            return value;
+        }
+        self.ram[self.map_ram_address(address) as usize]
     }
 
-    pub fn read_u16(&self, address: u16) -> u16 {
-        let address = self.map_address(address);
+    pub fn read_u16(&self, address_before: u16) -> u16 {
+        let address = self.map_ram_address(address_before);
         // Recreate the bug of reading a u16 over a page wraps it back
         // to the beginning of the page.
         let [address_low, address_high] = address.to_le_bytes();
@@ -72,33 +90,13 @@ impl Bus {
     }
 
     pub fn set_u8(&mut self, address: u16, value: u8) {
-        self.memory[self.map_address(address) as usize] = value;
+        self.ram[self.map_ram_address(address) as usize] = value;
     }
 
     pub fn set_u16(&mut self, address: u16, value: u16) {
         let [le, be] = value.to_le_bytes();
-        let mapped_address = self.map_address(address) as usize;
-        self.memory[mapped_address] = le;
-        self.memory[mapped_address + 1] = be;
-    }
-
-    pub fn load_program(&mut self, program: &[u8]) {
-        if program.len() > memory_range::CARTRIDGE_SPACE.size() as usize {
-            panic!(
-                "Attempting to load a program that is larger than the cartridge space."
-            );
-        }
-
-        // Copy the memory into the buffer.
-        for (index, value) in program.iter().enumerate() {
-            self.memory[memory_range::CARTRIDGE_SPACE.start as usize + index] = *value;
-        }
-
-        // TODO - For now set the start of the execution to the beginning byte of
-        // the program.
-        self.set_u16(
-            InterruptVectors::ResetVector as u16,
-            memory_range::CARTRIDGE_SPACE.start,
-        );
+        let mapped_address = self.map_ram_address(address) as usize;
+        self.ram[mapped_address] = le;
+        self.ram[mapped_address + 1] = be;
     }
 }

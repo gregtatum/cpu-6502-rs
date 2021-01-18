@@ -341,7 +341,7 @@ impl<'a> AsmLexer<'a> {
         let AsmLexer { mut labels, .. } = self;
 
         // Fill in the proper addresses for the labels. The code will be placed at
-        // memory_range::CARTRIDGE_SPACE.min when placed into the emulator.
+        // memory_range::PRG_ROM.min when placed into the emulator.
         for (string_index, byte_offset, label_mapping_type) in
             labels.addresses_to_label.iter()
         {
@@ -369,7 +369,7 @@ impl<'a> AsmLexer<'a> {
                 }
                 LabelMappingType::Absolute => {
                     let label_value_u16 = labels.get_address(*string_index)? as u16
-                        + memory_range::CARTRIDGE_SPACE.start;
+                        + memory_range::PRG_ROM.start;
 
                     let [low, high] = label_value_u16.to_le_bytes();
                     bytes[*byte_offset] = low;
@@ -394,10 +394,8 @@ impl<'a> AsmLexer<'a> {
 
                 std::mem::swap(&mut new_string, old_string);
 
-                address_to_label.insert(
-                    *address as u16 + memory_range::CARTRIDGE_SPACE.start,
-                    new_string,
-                );
+                address_to_label
+                    .insert(*address as u16 + memory_range::PRG_ROM.start, new_string);
             }
         }
 
@@ -1107,10 +1105,10 @@ mod test {
             "
                 jmp mylabel
                 lda #$11
-                mylabel: ; This is address 0x4025
+                mylabel: ; This is address 0x8005
                 lda #$22
             ",
-            [JMP_abs, 0x25, 0x40, LDA_imm, 0x11, LDA_imm, 0x22]
+            [JMP_abs, 0x05, 0x80, LDA_imm, 0x11, LDA_imm, 0x22]
         );
     }
 
@@ -1121,9 +1119,9 @@ mod test {
                              jmp mylabel
                             .byte $11
                             .byte $22, $33
-                mylabel:    .word $5544      ; This is address 0x4026
+                mylabel:    .word $5544      ; This is address 0x8006
             ",
-            [JMP_abs, 0x26, 0x40, 0x11, 0x22, 0x33, 0x44, 0x55]
+            [JMP_abs, 0x06, 0x80, 0x11, 0x22, 0x33, 0x44, 0x55]
         );
     }
 

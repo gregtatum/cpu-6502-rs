@@ -1,5 +1,7 @@
 use crate::rom::{Header, ROMLoadError};
 
+use super::Mapper;
+
 // The Nintendo MMC1 is a mapper ASIC used in Nintendo's SxROM and NES-EVENT
 // Game Pak boards. Most common SxROM boards are assigned to iNES Mapper 1.
 // This chip first appeared in the April of 1987.
@@ -33,12 +35,6 @@ const RAM_SIZE: usize = 0x2000; // 8kb
 const RAM_MASK: u16 = 0x1fff;
 const BANK_SIZE: usize = 0x4000; // 16kb
 const BANK_MASK: u16 = 0x3fff;
-
-// TODO - Move this to mod.rs
-pub trait Mapper {
-    fn read_cpu(&self, addr: u16) -> Option<u8>;
-    fn write_cpu(&mut self, addr: u16, value: u8) -> bool;
-}
 
 type ProgramBank = [u8; BANK_SIZE];
 

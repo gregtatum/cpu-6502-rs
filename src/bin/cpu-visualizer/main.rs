@@ -6,6 +6,7 @@ use nes::{
     asm::{AddressToLabel, AsmLexer, BytesLabels},
     bus::Bus,
     cpu_6502::Cpu6502,
+    mappers::SimpleProgram,
     opcodes::{Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
 use std::{collections::VecDeque, env, error::Error, io};
@@ -339,7 +340,7 @@ fn get_instructions_text<'a>(
         ));
 
         let operation = bus.read_u8(pc);
-        pc += 1;
+        pc = pc.wrapping_add(1);
 
         let opcode = OPCODE_STRING_TABLE[operation as usize];
         let mode = ADDRESSING_MODE_TABLE[operation as usize];
@@ -545,11 +546,7 @@ fn load_cpu() -> (Cpu6502, AddressToLabel) {
             } = lexer.into_bytes().unwrap();
             bytes.push(OpCode::KIL as u8);
             (
-                Cpu6502::new({
-                    let bus = Bus::new_shared_bus();
-                    bus.borrow_mut().load_program(&bytes);
-                    bus
-                }),
+                Cpu6502::new(Bus::new_shared_bus(Box::new(SimpleProgram::load(&bytes)))),
                 address_to_label,
             )
         }
