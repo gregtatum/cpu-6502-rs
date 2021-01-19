@@ -83,6 +83,8 @@ fibonacci:
   jmp fibonacci
 
 return:
+  ; We pushed once in the previous operation, pull that value out.
+  pla
   rts
 
 ; These are the expected results, as expressed as LE bytes.

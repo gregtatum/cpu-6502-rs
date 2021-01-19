@@ -15,3 +15,4 @@ termion = "1.5"
 [dev-dependencies]
 # Used in examples.
 png = "0.16"
+insta = { version = "1.5", features = ["ron"] }

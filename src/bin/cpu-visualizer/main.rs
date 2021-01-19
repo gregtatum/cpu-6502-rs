@@ -1,13 +1,12 @@
+mod load_cpu;
 #[allow(dead_code)]
 mod util;
 
 use crate::util::event::{Event, Events};
 use nes::{
-    asm::{AddressToLabel, AsmLexer, BytesLabels},
-    bus::Bus,
+    asm::AddressToLabel,
     cpu_6502::Cpu6502,
-    mappers::SimpleProgram,
-    opcodes::{Mode, OpCode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
+    opcodes::{Mode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
 use std::{collections::VecDeque, env, error::Error, io};
 use termion::{
@@ -28,9 +27,26 @@ const MAGENTA: Color = Color::Rgb(200, 100, 200);
 const GRAY: Color = Color::Rgb(170, 170, 170);
 const DIM_WHITE: Color = Color::Rgb(200, 200, 200);
 
+fn parse_cli_args() -> String {
+    let args: Vec<String> = env::args().collect();
+    match args.get(1) {
+        Some(filename) => filename.clone(),
+        None => {
+            eprintln!(
+                "The CPU visualizer expects the first argument to be a path to a raw .asm file."
+            );
+            eprintln!(
+                "cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/add-with-carry.asm"
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     // Load the CPU first, as this can exit the process.
-    let (mut cpu, address_to_label) = load_cpu();
+    let filename = parse_cli_args();
+    let (mut cpu, address_to_label) = load_cpu::load_cpu(&filename);
 
     // Terminal initialization
     let stdout = io::stdout().into_raw_mode()?;
@@ -518,41 +534,4 @@ fn get_ram_page_text(
     }
 
     spans
-}
-
-fn load_cpu() -> (Cpu6502, AddressToLabel) {
-    let args: Vec<String> = env::args().collect();
-    let filename = match args.get(1) {
-        Some(f) => f,
-        None => {
-            eprintln!(
-                "The CPU visualizer expects the first argument to be a path to a raw .asm file."
-            );
-            eprintln!(
-                "cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/add-with-carry.asm"
-            );
-            std::process::exit(1);
-        }
-    };
-
-    let contents = std::fs::read_to_string(filename).unwrap();
-    let mut lexer = AsmLexer::new(&contents);
-
-    match lexer.parse() {
-        Ok(_) => {
-            let BytesLabels {
-                mut bytes,
-                address_to_label,
-            } = lexer.into_bytes().unwrap();
-            bytes.push(OpCode::KIL as u8);
-            (
-                Cpu6502::new(Bus::new_shared_bus(Box::new(SimpleProgram::load(&bytes)))),
-                address_to_label,
-            )
-        }
-        Err(parse_error) => {
-            parse_error.panic_nicely();
-            panic!("");
-        }
-    }
 }
