@@ -215,7 +215,7 @@ impl ParseError {
     }
 
     pub fn panic_nicely(self) {
-        panic!(self.nice_message);
+        panic!("{}", self.nice_message);
     }
 }
 
