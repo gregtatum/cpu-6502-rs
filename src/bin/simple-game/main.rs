@@ -2,8 +2,7 @@ mod load_cpu;
 mod system;
 
 use std::{env, error::Error};
-use system::System;
-
+use system::{SimpleGame, System};
 
 fn parse_cli_args() -> String {
     let args: Vec<String> = env::args().collect();
@@ -25,8 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Load the CPU first, as this can exit the process.
     let filename = parse_cli_args();
     let (cpu, _) = load_cpu::load_cpu(&filename);
-    let mut system = System::new(cpu);
-    system.run_loop()?;
+    let mut system = System::new();
+    let mut game = SimpleGame::new(cpu, &mut system);
+    game.run_loop()?;
 
     Ok(())
 }
