@@ -23,3 +23,11 @@ To view the logs of the visualizer append the following:
 ```
 2> error.log; clear; cat error.log
 ```
+
+## Simple Game
+
+I am currently working on getting the simple game working.
+
+```
+cargo run --bin simple-game assets/snake.asm
+```

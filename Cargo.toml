@@ -11,6 +11,7 @@ name = "cpu-visualizer"
 colored = "1.9"
 tui = "0.13"
 termion = "1.5"
+sdl2 = "0.35"
 
 [dev-dependencies]
 # Used in examples.

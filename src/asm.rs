@@ -298,7 +298,7 @@ impl<'a> AsmLexer<'a> {
                                 self.parse_operand(instruction)?;
                             }
                             None => {
-                                self.expect_next_character(':')?;
+                                self.expect_next_character_ignore_casing(':')?;
                                 let label =
                                     Token::LabelDefinition(self.labels.take_string(word));
                                 self.tokens.push(label);
@@ -706,9 +706,9 @@ impl<'a> AsmLexer<'a> {
         }
     }
 
-    fn expect_next_character(&mut self, value: char) -> Result<(), String> {
+    fn expect_next_character_ignore_casing(&mut self, value: char) -> Result<(), String> {
         let next_char = self.next_character_or_err()?;
-        if next_char == value {
+        if next_char.to_ascii_lowercase() == value.to_ascii_lowercase() {
             Ok(())
         } else {
             Err(format!(
@@ -771,8 +771,8 @@ impl<'a> AsmLexer<'a> {
                             self.next_character_or_err()?;
                             let character = self.next_character_or_err()?;
                             self.tokens.push(match character {
-                                'x' => Token::Mode(TokenMode::ZeroPageX),
-                                'y' => Token::Mode(TokenMode::ZeroPageY),
+                                'x' | 'X' => Token::Mode(TokenMode::ZeroPageX),
+                                'y' | 'Y' => Token::Mode(TokenMode::ZeroPageY),
                                 _ => {
                                     return Err(format!(
                                         "Unexpected index mode: {}",
@@ -794,8 +794,8 @@ impl<'a> AsmLexer<'a> {
                             self.next_character_or_err()?;
                             let character = self.next_character_or_err()?;
                             self.tokens.push(match character {
-                                'x' => Token::Mode(TokenMode::AbsoluteIndexedX),
-                                'y' => Token::Mode(TokenMode::AbsoluteIndexedY),
+                                'x' | 'X' => Token::Mode(TokenMode::AbsoluteIndexedX),
+                                'y' | 'Y' => Token::Mode(TokenMode::AbsoluteIndexedY),
                                 _ => {
                                     return Err(format!(
                                         "Unexpected index mode: {}",
@@ -825,14 +825,14 @@ impl<'a> AsmLexer<'a> {
                         match char_to_enum(&character) {
                             Character::Value(',') => {
                                 // and ($aa,X) ; indirect indexed x
-                                self.expect_next_character('X')?;
-                                self.expect_next_character(')')?;
+                                self.expect_next_character_ignore_casing('X')?;
+                                self.expect_next_character_ignore_casing(')')?;
                                 self.tokens.push(Token::Mode(TokenMode::IndirectX));
                             }
                             Character::Value(')') => {
                                 // and ($aa),Y ; indirect indexed y
-                                self.expect_next_character(',')?;
-                                self.expect_next_character('Y')?;
+                                self.expect_next_character_ignore_casing(',')?;
+                                self.expect_next_character_ignore_casing('Y')?;
                                 self.tokens.push(Token::Mode(TokenMode::IndirectY));
                             }
                             _ => {
@@ -848,7 +848,7 @@ impl<'a> AsmLexer<'a> {
                         // jmp ($1234) ; indirect
                         self.tokens.push(Token::Mode(TokenMode::Indirect));
                         self.tokens.push(Token::U16(value_u16));
-                        self.expect_next_character(')')?;
+                        self.expect_next_character_ignore_casing(')')?;
                     }
                 }
                 return self.continue_to_end_of_line();

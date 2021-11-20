@@ -25,3 +25,8 @@ NES Wiki:
 
 NES Hacker Wiki:
   http://www.thealmightyguru.com/Games/Hacking/Wiki/
+
+
+
+| CPU | BUS | NES ROM | PPU                     | GamePad | APU |
+                      | Logic | Render | Scroll |
