@@ -15,6 +15,7 @@ pub enum Mode {
     IndirectX,        // izx
     IndirectY,        // izy
     Relative,         // rel
+    RegisterA,        // a
     ZeroPage,         // zp
     ZeroPageX,        // zpx
     ZeroPageY,        // zpy
@@ -34,6 +35,7 @@ pub enum TokenMode {
     Indirect,           // ind
     IndirectX,          // izx
     IndirectY,          // izy
+    RegisterA,          // a
     Relative,           // rel
     ZeroPageOrRelative, // zp,rel
     ZeroPageX,          // zpx
@@ -200,7 +202,7 @@ pub enum OpCode {
     SLO_zp = 0x07,
     PHP = 0x08,
     ORA_imm = 0x09,
-    ASL = 0x0a,
+    ASL_a = 0x0a,
     ANC_imm = 0x0b,
     NOP_abs = 0x0c,
     ORA_abs = 0x0d,
@@ -232,7 +234,7 @@ pub enum OpCode {
     RLA_zp = 0x27,
     PLP = 0x28,
     AND_imm = 0x29,
-    ROL = 0x2a,
+    ROL_a = 0x2a,
     ANC_imm1 = 0x2b,
     BIT_abs = 0x2c,
     AND_abs = 0x2d,
@@ -264,7 +266,7 @@ pub enum OpCode {
     SRE_zp = 0x47,
     PHA = 0x48,
     EOR_imm = 0x49,
-    LSR = 0x4a,
+    LSR_a = 0x4a,
     ALR_imm = 0x4b,
     JMP_abs = 0x4c,
     EOR_abs = 0x4d,
@@ -296,7 +298,7 @@ pub enum OpCode {
     RRA_zp = 0x67,
     PLA = 0x68,
     ADC_imm = 0x69,
-    ROR = 0x6a,
+    ROR_a = 0x6a,
     ARR_imm = 0x6b,
     JMP_ind = 0x6c,
     ADC_abs = 0x6d,
@@ -474,7 +476,8 @@ pub fn instruction_mode_to_op_code(
         (Instruction::AND, TokenMode::ZeroPageOrRelative) => OpCode::AND_zp,
         (Instruction::AND, TokenMode::ZeroPageX) => OpCode::AND_zpx,
         (Instruction::ARR, TokenMode::Immediate) => OpCode::ARR_imm,
-        (Instruction::ASL, TokenMode::None) => OpCode::ASL,
+        (Instruction::ASL, TokenMode::None) => OpCode::ASL_a,
+        (Instruction::ASL, TokenMode::RegisterA) => OpCode::ASL_a,
         (Instruction::ASL, TokenMode::Absolute) => OpCode::ASL_abs,
         (Instruction::ASL, TokenMode::AbsoluteIndexedX) => OpCode::ASL_abx,
         (Instruction::ASL, TokenMode::ZeroPageOrRelative) => OpCode::ASL_zp,
@@ -581,7 +584,8 @@ pub fn instruction_mode_to_op_code(
         (Instruction::LDY, TokenMode::Immediate) => OpCode::LDY_imm,
         (Instruction::LDY, TokenMode::ZeroPageOrRelative) => OpCode::LDY_zp,
         (Instruction::LDY, TokenMode::ZeroPageX) => OpCode::LDY_zpx,
-        (Instruction::LSR, TokenMode::None) => OpCode::LSR,
+        (Instruction::LSR, TokenMode::None) => OpCode::LSR_a,
+        (Instruction::LSR, TokenMode::RegisterA) => OpCode::LSR_a,
         (Instruction::LSR, TokenMode::Absolute) => OpCode::LSR_abs,
         (Instruction::LSR, TokenMode::AbsoluteIndexedX) => OpCode::LSR_abx,
         (Instruction::LSR, TokenMode::ZeroPageOrRelative) => OpCode::LSR_zp,
@@ -611,12 +615,14 @@ pub fn instruction_mode_to_op_code(
         (Instruction::RLA, TokenMode::IndirectY) => OpCode::RLA_izy,
         (Instruction::RLA, TokenMode::ZeroPageOrRelative) => OpCode::RLA_zp,
         (Instruction::RLA, TokenMode::ZeroPageX) => OpCode::RLA_zpx,
-        (Instruction::ROL, TokenMode::None) => OpCode::ROL,
+        (Instruction::ROL, TokenMode::None) => OpCode::ROL_a,
+        (Instruction::ROL, TokenMode::RegisterA) => OpCode::ROL_a,
         (Instruction::ROL, TokenMode::Absolute) => OpCode::ROL_abs,
         (Instruction::ROL, TokenMode::AbsoluteIndexedX) => OpCode::ROL_abx,
         (Instruction::ROL, TokenMode::ZeroPageOrRelative) => OpCode::ROL_zp,
         (Instruction::ROL, TokenMode::ZeroPageX) => OpCode::ROL_zpx,
-        (Instruction::ROR, TokenMode::None) => OpCode::ROR,
+        (Instruction::ROR, TokenMode::None) => OpCode::ROR_a,
+        (Instruction::ROR, TokenMode::RegisterA) => OpCode::ROR_a,
         (Instruction::ROR, TokenMode::Absolute) => OpCode::ROR_abs,
         (Instruction::ROR, TokenMode::AbsoluteIndexedX) => OpCode::ROR_abx,
         (Instruction::ROR, TokenMode::ZeroPageOrRelative) => OpCode::ROR_zp,
@@ -729,7 +735,7 @@ pub const ADDRESSING_MODE_TABLE: [Mode; 256] = [
     Mode::ZeroPage,
     Mode::None,
     Mode::Immediate,
-    Mode::None,
+    Mode::RegisterA,
     Mode::Immediate,
     Mode::Absolute,
     Mode::Absolute,
@@ -761,7 +767,7 @@ pub const ADDRESSING_MODE_TABLE: [Mode; 256] = [
     Mode::ZeroPage,
     Mode::None,
     Mode::Immediate,
-    Mode::None,
+    Mode::RegisterA,
     Mode::Immediate,
     Mode::Absolute,
     Mode::Absolute,
@@ -793,7 +799,7 @@ pub const ADDRESSING_MODE_TABLE: [Mode; 256] = [
     Mode::ZeroPage,
     Mode::None,
     Mode::Immediate,
-    Mode::None,
+    Mode::RegisterA,
     Mode::Immediate,
     Mode::Absolute,
     Mode::Absolute,
@@ -825,7 +831,7 @@ pub const ADDRESSING_MODE_TABLE: [Mode; 256] = [
     Mode::ZeroPage,
     Mode::None,
     Mode::Immediate,
-    Mode::None,
+    Mode::RegisterA,
     Mode::Immediate,
     Mode::Indirect,
     Mode::Absolute,

@@ -4,7 +4,7 @@ use crate::cpu_6502::*;
 /// Function: A:={adr}
 /// Flags: N Z
 pub fn lda(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_address, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.a = operand;
     cpu.update_zero_and_negative_flag(cpu.a);
 }
@@ -13,7 +13,7 @@ pub fn lda(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: {adr}:=A
 /// Flags:
 pub fn sta(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, _operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.bus.borrow_mut().set_u8(address, cpu.a);
 }
 
@@ -21,7 +21,7 @@ pub fn sta(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: X:={adr}
 /// Flags: N Z
 pub fn ldx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_address, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.x = operand;
     cpu.update_zero_and_negative_flag(cpu.x);
 }
@@ -30,7 +30,7 @@ pub fn ldx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: {adr}:=X
 /// Flags:
 pub fn stx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, _operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.bus.borrow_mut().set_u8(address, cpu.x);
 }
 
@@ -38,7 +38,7 @@ pub fn stx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: Y:={adr}
 /// Flags: N Z
 pub fn ldy(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_address, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.y = operand;
     cpu.update_zero_and_negative_flag(cpu.y);
 }
@@ -47,7 +47,7 @@ pub fn ldy(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: {adr}:=Y
 /// Flags:
 pub fn sty(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, _operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.bus.borrow_mut().set_u8(address, cpu.y);
 }
 

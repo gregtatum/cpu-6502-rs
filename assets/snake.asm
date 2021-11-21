@@ -323,7 +323,7 @@ updateloop:
   bpl updateloop ;branch to updateLoop if positive (negative flag not set)
 
   ;now determine where to move the head, based on the direction of the snake
-  ;lsr: Logical Shift Right. Shift all bits in register A one bit to the right
+  ;lsr – Logical Shift Right. Shift all bits in register A one bit to the right
   ;the bit that "falls off" is stored in the carry flag
   lda $02   ;load the value from address $02 (direction) into register A
   lsr A     ;shift to right

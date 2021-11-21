@@ -503,7 +503,9 @@ impl<'a> AsmLexer<'a> {
                                         None => return Err("Expected a u8 to be the operand of an operation, but found nothing".to_string())
                                     };
                             }
-                            TokenMode::Implied | TokenMode::None => {}
+                            TokenMode::Implied
+                            | TokenMode::None
+                            | TokenMode::RegisterA => {}
                         }
                     }
                     _ => {
@@ -743,8 +745,12 @@ impl<'a> AsmLexer<'a> {
             },
             Character::Alpha => {
                 let word = self.get_word(None)?;
-                let label = Token::LabelOperand(self.labels.take_string(word));
-                self.tokens.push(label);
+                if word == "A" || word == "a" {
+                    self.tokens.push(Token::Mode(TokenMode::RegisterA));
+                } else {
+                    let label = Token::LabelOperand(self.labels.take_string(word));
+                    self.tokens.push(label);
+                }
                 return self.continue_to_end_of_line();
             }
             Character::Value(';') => {
@@ -868,6 +874,12 @@ impl<'a> AsmLexer<'a> {
         instruction: Instruction,
     ) -> Result<(), String> {
         match instruction {
+            // Register A
+            Instruction::ASL => Ok(()),
+            Instruction::LSR => Ok(()),
+            Instruction::ROR => Ok(()),
+            Instruction::ROL => Ok(()),
+            // Implied
             Instruction::DEX => Ok(()),
             Instruction::DEY => Ok(()),
             Instruction::INX => Ok(()),
@@ -1146,6 +1158,24 @@ mod test {
                 0b11110000,
                 0b11110000
             ]
+        );
+    }
+
+    #[test]
+    fn test_register_a_mode() {
+        assert_program!(
+            "
+                asl
+                asl A
+                lsr
+                lsr A
+                ror
+                ror A
+                rol
+                rol A
+                asl a ; Lowercase
+            ",
+            [0x0A, 0x0A, 0x4A, 0x4A, 0x6A, 0x6A, 0x2A, 0x2A, 0x0A]
         );
     }
 }

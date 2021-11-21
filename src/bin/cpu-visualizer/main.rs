@@ -457,7 +457,7 @@ fn get_instructions_text<'a>(
                 }
             }
 
-            Mode::Implied | Mode::None => {}
+            Mode::Implied | Mode::None | Mode::RegisterA => {}
         }
 
         if i == 0 {

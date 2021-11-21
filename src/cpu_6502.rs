@@ -235,7 +235,10 @@ impl Cpu6502 {
             // the instruction. For example, the CLC instruction is implied, it is going
             // to clear the processor's Carry flag.
             Mode::Implied => {
-                panic!("An implied mode should never be directly activated.")
+                panic!("Attempting to get the operand address for an implied mode.")
+            }
+            Mode::RegisterA => {
+                panic!("Register A has no address.")
             }
             // The indirect addressing mode is similar to the absolute mode, but the
             // next u16 is actually a pointer to another address. Use this next address
@@ -296,7 +299,20 @@ impl Cpu6502 {
         }
     }
 
-    fn get_operand(&mut self, mode: Mode, extra_cycle: u8) -> (u16, u8) {
+    fn get_address_and_maybe_operand(
+        &mut self,
+        mode: Mode,
+        extra_cycle: u8,
+    ) -> (Option<u16>, u8) {
+        if mode == Mode::RegisterA {
+            return (None, self.a);
+        }
+        let address = self.get_operand_address(mode, extra_cycle);
+        let value = self.bus.borrow().read_u8(address);
+        (Some(address), value)
+    }
+
+    fn get_address_and_operand(&mut self, mode: Mode, extra_cycle: u8) -> (u16, u8) {
         let address = self.get_operand_address(mode, extra_cycle);
         let value = self.bus.borrow().read_u8(address);
         (address, value)

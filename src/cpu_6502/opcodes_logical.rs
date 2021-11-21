@@ -4,7 +4,7 @@ use crate::cpu_6502::*;
 /// Function: A:=A or {adr}
 /// Flags: N Z
 pub fn ora(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.a |= operand;
     cpu.update_zero_and_negative_flag(cpu.a);
 }
@@ -13,7 +13,7 @@ pub fn ora(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: A:=A&{adr}
 /// Flags: N Z
 pub fn and(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.a &= operand;
     cpu.update_zero_and_negative_flag(cpu.a);
 }
@@ -22,7 +22,7 @@ pub fn and(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: A:=A exor {adr}
 /// Flags: N Z
 pub fn eor(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.a ^= operand;
     cpu.update_zero_and_negative_flag(cpu.a);
 }
@@ -51,7 +51,7 @@ fn add_impl(cpu: &mut Cpu6502, operand: u8) {
 /// Function: A:=A+{adr}+C
 /// Flags: N V Z C
 pub fn adc(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     add_impl(cpu, operand);
 }
 
@@ -70,7 +70,7 @@ pub fn sbc(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
     // ...
     // 0b1111_1111, -1
 
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
 
     // In order to properly subtract we need the two's complement of the operand.
     // Normally this would be accomplished by;
@@ -88,7 +88,7 @@ pub fn sbc(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: A-{adr}
 /// Flags: N Z C
 pub fn cmp(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.update_zero_and_negative_flag(cpu.a.wrapping_sub(operand));
     cpu.set_status_flag(StatusFlag::Carry, cpu.a >= operand);
 }
@@ -98,7 +98,7 @@ pub fn cmp(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: X-{adr}
 /// Flags: N Z C
 pub fn cpx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.update_zero_and_negative_flag(cpu.x.wrapping_sub(operand));
     cpu.set_status_flag(StatusFlag::Carry, cpu.x >= operand);
 }
@@ -108,7 +108,7 @@ pub fn cpx(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: Y-{adr}
 /// Flags: N Z C
 pub fn cpy(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.update_zero_and_negative_flag(cpu.y.wrapping_sub(operand));
     cpu.set_status_flag(StatusFlag::Carry, cpu.y >= operand);
 }
@@ -117,7 +117,7 @@ pub fn cpy(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: {adr}:={adr}-1
 /// Flags: N Z
 pub fn dec(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     let result = operand.wrapping_sub(1);
     cpu.update_zero_and_negative_flag(result);
     cpu.bus.borrow_mut().set_u8(address, result);
@@ -143,7 +143,7 @@ pub fn dey(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Function: {adr}:={adr}+1
 /// Flags: N Z
 pub fn inc(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     let result = operand.wrapping_add(1);
     cpu.update_zero_and_negative_flag(result);
     cpu.bus.borrow_mut().set_u8(address, result);
@@ -169,43 +169,55 @@ pub fn iny(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Function: {adr}:={adr}*2
 /// Flags: N Z C
 pub fn asl(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_maybe_operand(mode, extra_cycle);
     let result = operand << 1;
     cpu.update_zero_and_negative_flag(result);
     // The Carry flag contains the bit that was shifted out:
     cpu.set_status_flag(StatusFlag::Carry, operand & 0b1000_0000 != 0);
-    cpu.bus.borrow_mut().set_u8(address, result);
+    if let Some(address) = address {
+        cpu.bus.borrow_mut().set_u8(address, result);
+    } else {
+        cpu.a = result;
+    }
 }
 
 /// Rotate left
 /// Function: {adr}:={adr}*2+C
 /// Flags: N Z C
 pub fn rol(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_maybe_operand(mode, extra_cycle);
     let result = (operand << 1) | cpu.get_carry();
     cpu.update_zero_and_negative_flag(result);
     // The Carry flag contains the bit that was shifted out:
     cpu.set_status_flag(StatusFlag::Carry, operand & 0b1000_0000 != 0);
-    cpu.bus.borrow_mut().set_u8(address, result);
+    if let Some(address) = address {
+        cpu.bus.borrow_mut().set_u8(address, result);
+    } else {
+        cpu.a = result;
+    }
 }
 
 /// Logical shift right
 /// Function: {adr}:={adr}/2
 /// Flags: N Z C
 pub fn lsr(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_maybe_operand(mode, extra_cycle);
     let result = operand >> 1;
     cpu.update_zero_and_negative_flag(result);
     // The Carry flag contains the bit that was shifted out:
     cpu.set_status_flag(StatusFlag::Carry, operand & 0b0000_0001 != 0);
-    cpu.bus.borrow_mut().set_u8(address, result);
+    if let Some(address) = address {
+        cpu.bus.borrow_mut().set_u8(address, result);
+    } else {
+        cpu.a = result;
+    }
 }
 
 /// Rotate right
 /// Function: {adr}:={adr}/2+C*128
 /// Flags: N Z C
 pub fn ror(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, operand) = cpu.get_address_and_maybe_operand(mode, extra_cycle);
 
     let result =
     // Shift the operand, {adr}/2
@@ -217,5 +229,9 @@ pub fn ror(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
     cpu.update_zero_and_negative_flag(result);
     // The Carry flag contains the bit that was shifted out:
     cpu.set_status_flag(StatusFlag::Carry, operand & 0b0000_0001 != 0);
-    cpu.bus.borrow_mut().set_u8(address, result);
+    if let Some(address) = address {
+        cpu.bus.borrow_mut().set_u8(address, result);
+    } else {
+        cpu.a = result;
+    }
 }

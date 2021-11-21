@@ -2,12 +2,12 @@ use crate::cpu_6502::*;
 
 fn branch(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8, do_branch: bool) {
     if do_branch {
-        let (address, _) = cpu.get_operand(mode, extra_cycle);
+        let (address, _) = cpu.get_address_and_operand(mode, extra_cycle);
         cpu.pc = address
     } else {
         // Just move the pc forward, but ignore the extra cycles, since the memory
         // won't actually be accessed.
-        cpu.get_operand(mode, 0);
+        cpu.get_address_and_operand(mode, 0);
     }
 }
 
@@ -131,7 +131,7 @@ pub fn rti(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Function: (S)-:=PC PC:={adr}
 /// Flags:
 pub fn jsr(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, _operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.push_stack_u16(cpu.pc);
     cpu.pc = address;
 }
@@ -147,7 +147,7 @@ pub fn rts(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Function: PC:={adr}
 /// Flags:
 pub fn jmp(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (address, _operand) = cpu.get_operand(mode, extra_cycle);
+    let (address, _operand) = cpu.get_address_and_operand(mode, extra_cycle);
     cpu.pc = address;
 }
 
@@ -155,7 +155,7 @@ pub fn jmp(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
 /// Function: N:=b7 V:=b6 Z:=A&{adr}
 /// Flags: N V Z
 pub fn bit(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
-    let (_, operand) = cpu.get_operand(mode, extra_cycle);
+    let (_, operand) = cpu.get_address_and_operand(mode, extra_cycle);
     let result = cpu.a & operand;
     cpu.set_status_flag(StatusFlag::Negative, operand & 0b10000000 != 0);
     cpu.set_status_flag(StatusFlag::Overflow, operand & 0b01000000 != 0);
@@ -216,5 +216,5 @@ pub fn clv(cpu: &mut Cpu6502, _mode: Mode, _extra_cycle: u8) {
 /// Flags:
 pub fn nop(cpu: &mut Cpu6502, mode: Mode, extra_cycle: u8) {
     // Spin some cycles and move the pc, but otherwise do nothing.
-    cpu.get_operand(mode, extra_cycle);
+    cpu.get_address_and_operand(mode, extra_cycle);
 }
