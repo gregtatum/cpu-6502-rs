@@ -507,21 +507,37 @@ fn get_ram_page_text(
 
     let mut parts = vec![];
     let page_u16: u16 = (page_u8 as u16) << 8;
+    let stack_address = cpu.s as u16 + 0x100;
     for i in 0..16 {
         // $00 0011 2233 4455 6677 8899 aabb ccdd eeff
         // ^^^
         parts.push(Span::styled(format!("${:02x}{:x}_ ", page_u8, i), cyan));
         for j in 0..8 {
-            let [le, be] = bus.read_u16(page_u16 + i * 16 + j * 2).to_le_bytes();
+            let address = page_u16 + i * 16 + j * 2;
+            let [le, be] = bus.read_u16(address).to_le_bytes();
             // $0000 0011 2233 4455 6677 8899 aabb ccdd eeff
             //       ^^^^
-            parts.push(Span::styled(format!("{:02x}{:02x} ", le, be), {
-                if j % 2 == 0 {
-                    style.fg(Color::White)
+            let color = if j % 2 == 0 {
+                style.fg(Color::White)
+            } else {
+                dim_white
+            };
+            parts.push(Span::styled(
+                format!("{:02x}", le),
+                if address == stack_address + 1 as u16 {
+                    style.fg(Color::Yellow).add_modifier(Modifier::BOLD)
                 } else {
-                    dim_white
-                }
-            }));
+                    color
+                },
+            ));
+            parts.push(Span::styled(
+                format!("{:02x} ", be),
+                if address == stack_address {
+                    style.fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    color
+                },
+            ));
         }
 
         if (i + 1) % cols == 0 {
