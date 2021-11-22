@@ -1,15 +1,91 @@
-use std::{cell::RefCell, time::Duration};
+use std::cell::RefCell;
 
 use nes::cpu_6502::Cpu6502;
 use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
-    rect::Rect,
     render::{Canvas, Texture, TextureCreator},
     video::{Window, WindowContext},
     Sdl,
 };
+
+pub struct ScreenBuffer<'a> {
+    pub texture_data: Vec<u8>,
+    pub texture: Texture<'a>,
+    pub texture_row_size: usize,
+    pub mem_offset: (u16, u16),
+}
+
+impl<'a> ScreenBuffer<'a> {
+    pub fn new(system: &'a System, mem_offset: (u16, u16)) -> ScreenBuffer<'a> {
+        let texture = system
+            .texture_creator
+            .create_texture_target(
+                PixelFormatEnum::RGB24,
+                system.window_size,
+                system.window_size,
+            )
+            .unwrap();
+
+        let u8s_per_pixel = 3;
+
+        assert_eq!(
+            mem_offset.1 - mem_offset.0,
+            (system.window_size * system.window_size) as u16,
+            "The mem_offset was not the correct size for the buffer"
+        );
+
+        let texture_size =
+            (system.window_size * system.window_size * u8s_per_pixel) as usize;
+
+        ScreenBuffer {
+            texture_data: vec![0; texture_size],
+            texture,
+            texture_row_size: (system.window_size * u8s_per_pixel) as usize,
+            mem_offset,
+        }
+    }
+
+    pub fn update(&mut self, cpu: &Cpu6502) -> bool {
+        let mut frame_index = 0;
+        let mut texture_dirty = false;
+        let bus = cpu.bus.borrow_mut();
+        for index in self.mem_offset.0..self.mem_offset.1 {
+            let (b1, b2, b3) = color(bus.read_u8(index as u16)).rgb();
+            if self.texture_data[frame_index] != b1
+                || self.texture_data[frame_index + 1] != b2
+                || self.texture_data[frame_index + 2] != b3
+            {
+                self.texture_data[frame_index] = b1;
+                self.texture_data[frame_index + 1] = b2;
+                self.texture_data[frame_index + 2] = b3;
+                texture_dirty = true;
+            }
+            frame_index += 3;
+        }
+        if texture_dirty {
+            self.texture
+                .update(None, &self.texture_data, self.texture_row_size)
+                .unwrap();
+        }
+        texture_dirty
+    }
+}
+
+fn color(byte: u8) -> Color {
+    match byte {
+        0 => sdl2::pixels::Color::BLACK,
+        1 => sdl2::pixels::Color::WHITE,
+        2 | 9 => sdl2::pixels::Color::GREY,
+        3 | 10 => sdl2::pixels::Color::RED,
+        4 | 11 => sdl2::pixels::Color::GREEN,
+        5 | 12 => sdl2::pixels::Color::BLUE,
+        6 | 13 => sdl2::pixels::Color::MAGENTA,
+        7 | 14 => sdl2::pixels::Color::YELLOW,
+        _ => sdl2::pixels::Color::CYAN,
+    }
+}
 
 pub struct System {
     pub sdl_context: Sdl,
@@ -52,51 +128,31 @@ impl System {
 pub struct SimpleGame<'a> {
     pub cpu: Cpu6502,
     pub system: &'a System,
-    pub texture: Texture<'a>,
+    pub screen: ScreenBuffer<'a>,
 }
 
 impl<'a> SimpleGame<'a> {
     pub fn new(cpu: Cpu6502, system: &'a System) -> SimpleGame<'a> {
-        let texture = system
-            .texture_creator
-            .create_texture_target(
-                PixelFormatEnum::RGB24,
-                system.window_size,
-                system.window_size,
-            )
-            .unwrap();
-
         SimpleGame {
             cpu,
             system,
-            texture,
+            // 0x200 to 0x600 is within the RAM range of the CPU.
+            screen: ScreenBuffer::new(&system, (0x200, 0x600)),
         }
     }
 
-    pub fn draw(&mut self, x: i32, y: i32) -> Result<(), String> {
-        // Clear the canvas.
-        let mut canvas = self.system.canvas.borrow_mut();
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
+    pub fn draw(&mut self) -> Result<(), String> {
+        if self.screen.update(&self.cpu) {
+            let mut canvas = self.system.canvas.borrow_mut();
+            canvas.copy(&self.screen.texture, None, None).unwrap();
+            canvas.present();
+        }
 
-        // Draw a demo square.
-        canvas.set_draw_color(Color::RGB(255, 210, 0));
-        let w = self.system.device_pixels as f32;
-        canvas.fill_rect(Rect::new(
-            (w * 0.25) as i32 + x,
-            (w * 0.25) as i32 + y,
-            (w * 0.5) as u32,
-            (w * 0.5) as u32,
-        ))?;
-
-        canvas.present();
         Ok(())
     }
 
     pub fn run_loop(&mut self) -> Result<(), String> {
         let mut event_pump = self.system.sdl_context.event_pump().unwrap();
-        let mut x = 0;
-        let mut y = 0;
         loop {
             for event in event_pump.poll_iter() {
                 match event {
@@ -127,9 +183,9 @@ impl<'a> SimpleGame<'a> {
                     _ => {}
                 }
             }
-            self.draw(x, y)?;
-
-            ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+            self.cpu.tick();
+            self.draw()?;
+            ::std::thread::sleep(std::time::Duration::new(0, 70_000));
         }
     }
 }
