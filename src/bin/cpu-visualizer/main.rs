@@ -8,9 +8,17 @@ use nes::{
     cpu_6502::Cpu6502,
     opcodes::{Mode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
-use std::{collections::VecDeque, env, error::Error, io};
+use std::{
+    collections::{HashMap, VecDeque},
+    env,
+    error::Error,
+    io::{self, Stdout},
+};
 use termion::{
-    event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen,
+    event::Key,
+    input::MouseTerminal,
+    raw::{IntoRawMode, RawTerminal},
+    screen::AlternateScreen,
 };
 use tui::{
     backend::TermionBackend,
@@ -43,166 +51,213 @@ fn parse_cli_args() -> String {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Load the CPU first, as this can exit the process.
-    let filename = parse_cli_args();
-    let (mut cpu, address_to_label) = load_cpu::load_cpu(&filename);
+/// Determines how the Visualizer operates.
+enum VisMode {
+    Visualizer,
+    Help,
+    Quit,
+}
 
-    // Terminal initialization
-    let stdout = io::stdout().into_raw_mode()?;
-    let stdout = MouseTerminal::from(stdout);
-    let stdout = AlternateScreen::from(stdout);
-    let backend = TermionBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+struct Visualizer {
+    last_drawn_tick_count: u64,
+    cpu: Cpu6502,
+    address_to_label: HashMap<u16, String>,
+    mode: VisMode,
+    events: Events,
+    executed_instructions: VecDeque<Spans<'static>>,
+}
 
-    let events = Events::new();
+type VisTerminal =
+    Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 
-    let registers_rect_width = 40;
-    let instructions_rect_width = 40;
-    let mut last_drawn_tick_count = u64::MAX;
-    let mut executed_instructions = VecDeque::new();
+impl Visualizer {
+    pub fn new() -> Result<Visualizer, Box<dyn Error>> {
+        // Load the CPU first, as this can exit the process.
+        let filename = parse_cli_args();
+        let (cpu, address_to_label) = load_cpu::load_cpu(&filename);
 
-    loop {
-        if last_drawn_tick_count != cpu.tick_count {
-            // Only draw again if the cpu tick has changed.
-            terminal.draw(|frame| {
-                last_drawn_tick_count = cpu.tick_count;
-                let frame_rect = frame.size();
-                //
-                // col 0                    1         2           3  main_rect_height
-                //     |--------------------|---------|-----------|  -
-                //     | zero page          | instr   | registers |  |  - main_rect_inner_height
-                //     |                    | uctions |           |  |  |
-                //     |                    |         |           |  |  |
-                //     |--------------------|         |           |  |  |
-                //     | stack              |         |           |  |  |
-                //     |                    |         |           |  |  |
-                //     |                    |         |           |  |  -
-                //     |--------------------|---------|-----------|  -
-                let col0 = 0;
-                let col3 = frame_rect.width;
-                let col2 = col3 - registers_rect_width;
-                let col1 = col2 - instructions_rect_width;
+        Ok(Visualizer {
+            last_drawn_tick_count: u64::MAX,
+            cpu,
+            address_to_label,
+            mode: VisMode::Visualizer,
+            events: Events::new(),
+            executed_instructions: VecDeque::new(),
+        })
+    }
 
-                let main_rect_height = frame_rect.height;
-                let main_rect_inner_height = main_rect_height - 2;
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut terminal = {
+            let stdout = io::stdout().into_raw_mode()?;
+            let stdout = MouseTerminal::from(stdout);
+            let stdout = AlternateScreen::from(stdout);
+            let backend = TermionBackend::new(stdout);
+            Terminal::new(backend)?
+        };
 
-                let ram_rect_width =
-                    frame_rect.width - registers_rect_width - instructions_rect_width;
-                let ram_rect_inner_width = ram_rect_width - 2;
-                let ram_rect = Rect::new(col0, 0, ram_rect_width, main_rect_height);
+        loop {
+            match self.mode {
+                VisMode::Visualizer => {
+                    if self.last_drawn_tick_count != self.cpu.tick_count {
+                        // Only draw again if the cpu tick has changed.
+                        self.draw_cpu_visualizer(&mut terminal)?;
+                    }
+                }
+                VisMode::Help => {}
+                VisMode::Quit => return Ok(()),
+            };
 
-                let instructions_rect =
-                    Rect::new(col1, 0, instructions_rect_width, main_rect_height);
-
-                let registers_rect =
-                    Rect::new(col2, 0, registers_rect_width, main_rect_height);
-
-                let block = Block::default()
-                    .style(Style::default().bg(Color::Black).fg(Color::White));
-                frame.render_widget(block, frame_rect);
-
-                let create_block = |title| {
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .style(Style::default().bg(Color::Black).fg(BORDER_COLOR))
-                        .title(Span::styled(
-                            title,
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ))
-                };
-
-                let zero_page_text = get_ram_page_text(
-                    &cpu,
-                    0,
-                    ram_rect_inner_width,
-                    main_rect_inner_height,
-                );
-                let zero_page_rect = {
-                    let mut rect = ram_rect;
-                    rect.height = zero_page_text.len() as u16 + 2;
-                    rect
-                };
-
-                // Zero Page RAM
-                frame.render_widget(
-                    Paragraph::new(zero_page_text)
-                        .block(create_block("Zero Page RAM"))
-                        .alignment(Alignment::Left),
-                    zero_page_rect,
-                );
-
-                let stack_page_text = get_ram_page_text(
-                    &cpu,
-                    0x01,
-                    ram_rect_inner_width,
-                    main_rect_inner_height,
-                );
-                let stack_page_rect = {
-                    let mut rect = ram_rect;
-                    rect.y = zero_page_rect.height;
-                    rect.height = stack_page_text.len() as u16 + 2;
-                    rect
-                };
-                // Stack Page RAM
-                frame.render_widget(
-                    Paragraph::new(stack_page_text)
-                        .block(create_block("Stack Page RAM"))
-                        .alignment(Alignment::Left),
-                    stack_page_rect,
-                );
-
-                // Instructions.
-                frame.render_widget(
-                    Paragraph::new(get_instructions_text(
-                        &cpu,
-                        main_rect_inner_height,
-                        &mut executed_instructions,
-                        &address_to_label,
-                    ))
-                    .block(create_block("Instructions"))
-                    .alignment(Alignment::Left),
-                    instructions_rect,
-                );
-
-                // Registeres
-                let registers_text = vec![
-                    add_tick_count(cpu.tick_count),
-                    add_register_span("A", cpu.a),
-                    add_register_span("X", cpu.x),
-                    add_register_span("Y", cpu.y),
-                    add_pc_register_span(cpu.pc),
-                    add_register_span("SP", cpu.s),
-                    add_register_span("P", cpu.p),
-                    add_status_register_info("NV__DIZC"),
-                    add_status_register_info("||  ||||"),
-                    add_status_register_info("||  |||+- Carry"),
-                    add_status_register_info("||  ||+-- Zero"),
-                    add_status_register_info("||  |+--- Interrupt Disable"),
-                    add_status_register_info("||  +---- Decimal"),
-                    add_status_register_info("|+-------- Overflow"),
-                    add_status_register_info("+--------- Negative"),
-                ];
-
-                frame.render_widget(
-                    Paragraph::new(registers_text)
-                        .block(create_block("CPU Registers"))
-                        .alignment(Alignment::Left)
-                        .wrap(Wrap { trim: true }),
-                    registers_rect,
-                );
-            })?;
+            self.process_events()?;
         }
+    }
 
+    fn draw_cpu_visualizer(
+        &mut self,
+        terminal: &mut VisTerminal,
+    ) -> Result<(), Box<dyn Error>> {
+        let registers_rect_width = 40;
+        let instructions_rect_width = 40;
+
+        terminal.draw(|frame| {
+            self.last_drawn_tick_count = self.cpu.tick_count;
+            let frame_rect = frame.size();
+            //
+            // col 0                    1         2           3  main_rect_height
+            //     |--------------------|---------|-----------|  -
+            //     | zero page          | instr   | registers |  |  - main_rect_inner_height
+            //     |                    | uctions |           |  |  |
+            //     |                    |         |           |  |  |
+            //     |--------------------|         |           |  |  |
+            //     | stack              |         |           |  |  |
+            //     |                    |         |           |  |  |
+            //     |                    |         |           |  |  -
+            //     |--------------------|---------|-----------|  -
+            let col0 = 0;
+            let col3 = frame_rect.width;
+            let col2 = col3 - registers_rect_width;
+            let col1 = col2 - instructions_rect_width;
+
+            let main_rect_height = frame_rect.height;
+            let main_rect_inner_height = main_rect_height - 2;
+
+            let ram_rect_width =
+                frame_rect.width - registers_rect_width - instructions_rect_width;
+            let ram_rect_inner_width = ram_rect_width - 2;
+            let ram_rect = Rect::new(col0, 0, ram_rect_width, main_rect_height);
+
+            let instructions_rect =
+                Rect::new(col1, 0, instructions_rect_width, main_rect_height);
+
+            let registers_rect =
+                Rect::new(col2, 0, registers_rect_width, main_rect_height);
+
+            let block = Block::default()
+                .style(Style::default().bg(Color::Black).fg(Color::White));
+            frame.render_widget(block, frame_rect);
+
+            let create_block = |title| {
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().bg(Color::Black).fg(BORDER_COLOR))
+                    .title(Span::styled(
+                        title,
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ))
+            };
+
+            let zero_page_text = get_ram_page_text(
+                &self.cpu,
+                0,
+                ram_rect_inner_width,
+                main_rect_inner_height,
+            );
+            let zero_page_rect = {
+                let mut rect = ram_rect;
+                rect.height = zero_page_text.len() as u16 + 2;
+                rect
+            };
+
+            // Zero Page RAM
+            frame.render_widget(
+                Paragraph::new(zero_page_text)
+                    .block(create_block("Zero Page RAM"))
+                    .alignment(Alignment::Left),
+                zero_page_rect,
+            );
+
+            let stack_page_text = get_ram_page_text(
+                &self.cpu,
+                0x01,
+                ram_rect_inner_width,
+                main_rect_inner_height,
+            );
+            let stack_page_rect = {
+                let mut rect = ram_rect;
+                rect.y = zero_page_rect.height;
+                rect.height = stack_page_text.len() as u16 + 2;
+                rect
+            };
+            // Stack Page RAM
+            frame.render_widget(
+                Paragraph::new(stack_page_text)
+                    .block(create_block("Stack Page RAM"))
+                    .alignment(Alignment::Left),
+                stack_page_rect,
+            );
+
+            // Instructions.
+            frame.render_widget(
+                Paragraph::new(get_instructions_text(
+                    &self.cpu,
+                    main_rect_inner_height,
+                    &mut self.executed_instructions,
+                    &self.address_to_label,
+                ))
+                .block(create_block("Instructions"))
+                .alignment(Alignment::Left),
+                instructions_rect,
+            );
+
+            // Registeres
+            let registers_text = vec![
+                add_tick_count(self.cpu.tick_count),
+                add_register_span("A", self.cpu.a),
+                add_register_span("X", self.cpu.x),
+                add_register_span("Y", self.cpu.y),
+                add_pc_register_span(self.cpu.pc),
+                add_register_span("SP", self.cpu.s),
+                add_register_span("P", self.cpu.p),
+                add_status_register_info("NV__DIZC"),
+                add_status_register_info("||  ||||"),
+                add_status_register_info("||  |||+- Carry"),
+                add_status_register_info("||  ||+-- Zero"),
+                add_status_register_info("||  |+--- Interrupt Disable"),
+                add_status_register_info("||  +---- Decimal"),
+                add_status_register_info("|+-------- Overflow"),
+                add_status_register_info("+--------- Negative"),
+            ];
+
+            frame.render_widget(
+                Paragraph::new(registers_text)
+                    .block(create_block("CPU Registers"))
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: true }),
+                registers_rect,
+            );
+        })?;
+        Ok(())
+    }
+
+    fn process_events(&mut self) -> Result<(), Box<dyn Error>> {
         // Handle all of the keyboard events.
-        if let Event::Input(key) = events.next()? {
+        if let Event::Input(key) = self.events.next()? {
             match key {
                 Key::Char('q') => {
-                    break;
+                    self.mode = VisMode::Quit;
                 }
                 Key::Char('n') | Key::Char('1') => {
-                    if !cpu.tick() {
-                        break;
+                    if !self.cpu.tick() {
+                        self.mode = VisMode::Quit;
                     }
                 }
                 // Skip through instructions much quicker.
@@ -210,8 +265,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Some(n) = c.to_digit(10) {
                         if n != 0 {
                             for _ in 0..((n + 1).pow(2)) {
-                                if !cpu.tick() {
-                                    return Ok(());
+                                if !self.cpu.tick() {
+                                    self.mode = VisMode::Quit;
+                                    break;
                                 }
                             }
                         }
@@ -220,8 +276,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
+        Ok(())
     }
-    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut visualizer = Visualizer::new()?;
+    visualizer.run()
 }
 
 fn add_register_span(name: &str, value: u8) -> Spans {
