@@ -8,11 +8,16 @@ use nes::{
     cpu_6502::Cpu6502,
     opcodes::{Mode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
+use std::io::Write;
 use std::{
     collections::{HashMap, VecDeque},
     env,
     error::Error,
     io::{self, Stdout},
+};
+use std::{
+    fs::{self, OpenOptions},
+    io::stdout,
 };
 use termion::{
     event::Key,
@@ -35,6 +40,28 @@ const MAGENTA: Color = Color::Rgb(200, 100, 200);
 const GRAY: Color = Color::Rgb(170, 170, 170);
 const DIM_WHITE: Color = Color::Rgb(200, 200, 200);
 
+fn init_log() {
+    match fs::File::create("log.txt") {
+        Ok(_) => {}
+        // Potential errors are that the file already exists, so just ignore it.
+        Err(_) => {}
+    };
+}
+
+fn log(text: &str) {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open("log.txt")
+        .expect("Unable to open file");
+
+    file.write_all(text.as_bytes())
+        .expect("Failed to write file");
+
+    file.write_all("\n".as_bytes())
+        .expect("Failed to write file");
+}
+
 fn parse_cli_args() -> String {
     let args: Vec<String> = env::args().collect();
     match args.get(1) {
@@ -52,19 +79,26 @@ fn parse_cli_args() -> String {
 }
 
 /// Determines how the Visualizer operates.
+#[derive(PartialEq, Clone, Debug, Copy)]
 enum VisMode {
     Visualizer,
     Help,
+    AddPageMemory,
     Quit,
 }
 
 struct Visualizer {
     last_drawn_tick_count: u64,
+    last_drawn_mode: Option<VisMode>,
     cpu: Cpu6502,
     address_to_label: HashMap<u16, String>,
     mode: VisMode,
     events: Events,
     executed_instructions: VecDeque<Spans<'static>>,
+    add_page_address: String,
+    draw_is_dirty: bool,
+    last_size: Rect,
+    pages: Vec<u8>,
 }
 
 type VisTerminal =
@@ -74,15 +108,24 @@ impl Visualizer {
     pub fn new() -> Result<Visualizer, Box<dyn Error>> {
         // Load the CPU first, as this can exit the process.
         let filename = parse_cli_args();
+        log(&format!("Loading file {}", filename));
         let (cpu, address_to_label) = load_cpu::load_cpu(&filename);
+        let mut events = Events::new();
+        // Our event processing handles exiting.
+        events.disable_exit_key();
 
         Ok(Visualizer {
             last_drawn_tick_count: u64::MAX,
+            last_drawn_mode: None,
             cpu,
             address_to_label,
             mode: VisMode::Visualizer,
-            events: Events::new(),
+            events,
             executed_instructions: VecDeque::new(),
+            add_page_address: String::new(),
+            draw_is_dirty: false,
+            last_size: Default::default(),
+            pages: Vec::new(),
         })
     }
 
@@ -96,19 +139,83 @@ impl Visualizer {
         };
 
         loop {
-            match self.mode {
-                VisMode::Visualizer => {
-                    if self.last_drawn_tick_count != self.cpu.tick_count {
-                        // Only draw again if the cpu tick has changed.
+            let size = terminal.size().expect("Unable to get the terminal size");
+
+            // Check if the state is dirty and needs to be redrawn.
+            if self.last_drawn_tick_count != self.cpu.tick_count
+                || Some(self.mode) != self.last_drawn_mode
+                || self.last_size != size
+                || self.draw_is_dirty
+            {
+                match self.mode {
+                    VisMode::Visualizer => {
                         self.draw_cpu_visualizer(&mut terminal)?;
                     }
-                }
-                VisMode::Help => {}
-                VisMode::Quit => return Ok(()),
-            };
+                    VisMode::Help => {
+                        self.draw_help(&mut terminal)?;
+                    }
+                    VisMode::AddPageMemory => {
+                        self.draw_add_page_memory(&mut terminal)?;
+                    }
+                    VisMode::Quit => return Ok(()),
+                };
+                self.draw_is_dirty = false;
+                self.last_size = size;
+            }
+
+            self.last_drawn_mode = Some(self.mode);
 
             self.process_events()?;
         }
+    }
+
+    fn draw_help(&mut self, terminal: &mut VisTerminal) -> Result<(), Box<dyn Error>> {
+        terminal.draw(|frame| {
+            let help = vec![
+                //
+                "   n - next instruction",
+                " 1-9 - next instructions exponentionally ",
+                " h/? - show help",
+                "   q - quit",
+                "   a - add a page of memory",
+                "   r - remove a page of memory",
+            ];
+            let mut width = 0;
+            for s in help.iter() {
+                width = width.max(s.len());
+            }
+            frame.render_widget(
+                Paragraph::new(help.join("\n"))
+                    .block(create_block("Help"))
+                    .alignment(Alignment::Left),
+                Rect::new(0, 0, width as u16 + 2, help.len() as u16 + 2),
+            );
+        })?;
+        Ok(())
+    }
+
+    fn draw_add_page_memory(
+        &mut self,
+        terminal: &mut VisTerminal,
+    ) -> Result<(), Box<dyn Error>> {
+        terminal.draw(|frame| {
+            frame.set_cursor(
+                // Put cursor past the end of the input text
+                self.add_page_address.len() as u16 + 1,
+                // Move one line down, from the border to the input line
+                1,
+            );
+
+            let title = "Add a page of memory";
+
+            frame.render_widget(
+                Paragraph::new(format!("{}", self.add_page_address.clone()))
+                    .block(create_block(title))
+                    .alignment(Alignment::Left),
+                Rect::new(0, 0, (title.len() + 2) as u16, 3),
+            );
+        })?;
+        Ok(())
     }
 
     fn draw_cpu_visualizer(
@@ -155,16 +262,6 @@ impl Visualizer {
                 .style(Style::default().bg(Color::Black).fg(Color::White));
             frame.render_widget(block, frame_rect);
 
-            let create_block = |title| {
-                Block::default()
-                    .borders(Borders::ALL)
-                    .style(Style::default().bg(Color::Black).fg(BORDER_COLOR))
-                    .title(Span::styled(
-                        title,
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ))
-            };
-
             let zero_page_text = get_ram_page_text(
                 &self.cpu,
                 0,
@@ -204,6 +301,31 @@ impl Visualizer {
                     .alignment(Alignment::Left),
                 stack_page_rect,
             );
+
+            // Add the pages of memory.
+            for (i, page) in self.pages.iter().enumerate() {
+                let text = get_ram_page_text(
+                    &self.cpu,
+                    *page,
+                    ram_rect_inner_width,
+                    main_rect_inner_height,
+                );
+                let rect = {
+                    let mut rect = ram_rect;
+                    rect.y = zero_page_rect.height * (i as u16 + 2);
+                    rect.height = text.len() as u16 + 2;
+                    rect
+                };
+                // Only render it if there is enough space.
+                if rect.y + rect.height < frame_rect.height {
+                    frame.render_widget(
+                        Paragraph::new(text)
+                            .block(create_block(&format!("Page ${:02x}", page)))
+                            .alignment(Alignment::Left),
+                        rect,
+                    );
+                }
+            }
 
             // Instructions.
             frame.render_widget(
@@ -251,29 +373,114 @@ impl Visualizer {
     fn process_events(&mut self) -> Result<(), Box<dyn Error>> {
         // Handle all of the keyboard events.
         if let Event::Input(key) = self.events.next()? {
-            match key {
-                Key::Char('q') => {
-                    self.mode = VisMode::Quit;
-                }
-                Key::Char('n') | Key::Char('1') => {
-                    if !self.cpu.tick() {
+            match self.mode {
+                VisMode::Visualizer => match key {
+                    Key::Char('a') => {
+                        log("Go to add page memory");
+                        self.add_page_address = "0x".into();
+                        self.mode = VisMode::AddPageMemory;
+                    }
+                    Key::Char('r') => {
+                        log("Remove a page of memory");
+                        self.pages.pop();
+                        self.draw_is_dirty = true;
+                    }
+                    Key::Char('q') => {
+                        log("Quit");
                         self.mode = VisMode::Quit;
                     }
-                }
-                // Skip through instructions much quicker.
-                Key::Char(c) => {
-                    if let Some(n) = c.to_digit(10) {
-                        if n != 0 {
-                            for _ in 0..((n + 1).pow(2)) {
-                                if !self.cpu.tick() {
-                                    self.mode = VisMode::Quit;
-                                    break;
+                    Key::Char('h') | Key::Char('?') => {
+                        log("Go to help");
+                        self.mode = VisMode::Help;
+                    }
+                    Key::Char('n') | Key::Char('1') => {
+                        log(&format!("Next instruction ${:x}", self.cpu.pc));
+                        if !self.cpu.tick() {
+                            log("CPU instructions ended, quitting.");
+                            self.mode = VisMode::Quit;
+                        }
+                    }
+                    // Skip through instructions much quicker.
+                    Key::Char(c) => {
+                        if let Some(n) = c.to_digit(10) {
+                            if n != 0 {
+                                let count = (n + 1).pow(2);
+                                log(&format!("Next {} instructions", count));
+                                for _ in 0..count {
+                                    if !self.cpu.tick() {
+                                        log("CPU instructions ended, quitting.");
+                                        self.mode = VisMode::Quit;
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                _ => {}
+                    _ => {}
+                },
+                VisMode::Help => match key {
+                    Key::Char('q') => {
+                        log("Quit");
+                        self.mode = VisMode::Quit;
+                    }
+                    _ => {
+                        log("Go to visualizer from Help");
+                        self.mode = VisMode::Visualizer;
+                    }
+                },
+                VisMode::AddPageMemory => match key {
+                    Key::Char('\n') => {
+                        if self.add_page_address.len() == 2 {
+                            log("No page address entered");
+                            self.add_page_address.clear();
+                            self.mode = VisMode::Visualizer;
+                        } else {
+                            log(&format!("Add page memory ${}", &self.add_page_address));
+                            let page = u8::from_str_radix(
+                                &self.add_page_address[2..self.add_page_address.len()],
+                                16,
+                            )
+                            .expect("Unable to parse hex string");
+                            log(&format!("Page parsed ${:x}", page));
+                            if page < 0x20 {
+                                self.pages.push(page);
+                            } else {
+                                log(&format!("Page is not in range ${:x}", page));
+                            }
+                            self.add_page_address.clear();
+                            self.mode = VisMode::Visualizer;
+                        }
+                    }
+                    Key::Backspace => {
+                        if self.add_page_address.len() > 2 {
+                            self.add_page_address.pop();
+                            self.draw_is_dirty = true;
+                            log(&format!(
+                                "Page address changed ${}",
+                                self.add_page_address
+                            ));
+                        }
+                    }
+                    Key::Char('q') | Key::Esc => {
+                        log("Go back to visualizer");
+                        self.add_page_address.clear();
+                        self.mode = VisMode::Visualizer;
+                    }
+                    Key::Char(c) => {
+                        let is_hex_digit =
+                            (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9');
+                        if is_hex_digit && self.add_page_address.len() < 4 {
+                            self.add_page_address.push(c);
+                            self.draw_is_dirty = true;
+                            log(&format!(
+                                "Page address changed ${}",
+                                self.add_page_address
+                            ));
+                        }
+                    }
+                    _ => {}
+                },
+                VisMode::Quit => {}
             }
         }
         Ok(())
@@ -281,6 +488,22 @@ impl Visualizer {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    std::panic::set_hook(Box::new(move |x| {
+        stdout()
+            .into_raw_mode()
+            .unwrap()
+            .suspend_raw_mode()
+            .unwrap();
+        write!(
+            stdout().into_raw_mode().unwrap(),
+            "{}",
+            termion::screen::ToMainScreen
+        )
+        .unwrap();
+        write!(stdout(), "{:?}", x).unwrap();
+    }));
+
+    init_log();
     let mut visualizer = Visualizer::new()?;
     visualizer.run()
 }
@@ -611,4 +834,14 @@ fn get_ram_page_text(
     }
 
     spans
+}
+
+fn create_block(title: &str) -> Block {
+    Block::default()
+        .borders(Borders::ALL)
+        .style(Style::default().bg(Color::Black).fg(BORDER_COLOR))
+        .title(Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        ))
 }
