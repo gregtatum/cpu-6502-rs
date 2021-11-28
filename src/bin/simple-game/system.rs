@@ -183,9 +183,15 @@ impl<'a> SimpleGame<'a> {
                     _ => {}
                 }
             }
+
+            self.cpu
+                .bus
+                .borrow_mut()
+                .set_u8(0xfe, rand::random::<u8>() % 15 + 1);
+
             self.cpu.tick();
             self.draw()?;
-            ::std::thread::sleep(std::time::Duration::new(0, 70_000));
+            ::std::thread::sleep(std::time::Duration::new(0, 10_000));
         }
     }
 }
