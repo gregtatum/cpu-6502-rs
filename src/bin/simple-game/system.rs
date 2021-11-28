@@ -31,7 +31,7 @@ impl<'a> ScreenBuffer<'a> {
         let u8s_per_pixel = 3;
 
         assert_eq!(
-            mem_offset.1 - mem_offset.0,
+            (mem_offset.1 - mem_offset.0) * 4,
             (system.window_size * system.window_size) as u16,
             "The mem_offset was not the correct size for the buffer"
         );
@@ -52,17 +52,20 @@ impl<'a> ScreenBuffer<'a> {
         let mut texture_dirty = false;
         let bus = cpu.bus.borrow_mut();
         for index in self.mem_offset.0..self.mem_offset.1 {
-            let (b1, b2, b3) = color(bus.read_u8(index as u16)).rgb();
-            if self.texture_data[frame_index] != b1
-                || self.texture_data[frame_index + 1] != b2
-                || self.texture_data[frame_index + 2] != b3
-            {
-                self.texture_data[frame_index] = b1;
-                self.texture_data[frame_index + 1] = b2;
-                self.texture_data[frame_index + 2] = b3;
-                texture_dirty = true;
+            let byte = bus.read_u8(index as u16);
+            for n in 0..4 {
+                let (r, g, b) = color((byte >> n) & 0b11).rgb();
+                if self.texture_data[frame_index] != r
+                    || self.texture_data[frame_index + 1] != g
+                    || self.texture_data[frame_index + 2] != b
+                {
+                    self.texture_data[frame_index] = r;
+                    self.texture_data[frame_index + 1] = g;
+                    self.texture_data[frame_index + 2] = b;
+                    texture_dirty = true;
+                }
+                frame_index += 3;
             }
-            frame_index += 3;
         }
         if texture_dirty {
             self.texture
@@ -136,8 +139,8 @@ impl<'a> SimpleGame<'a> {
         SimpleGame {
             cpu,
             system,
-            // 0x200 to 0x600 is within the RAM range of the CPU.
-            screen: ScreenBuffer::new(&system, (0x200, 0x600)),
+            // 0x200 to 0x300 is within the RAM range of the CPU.
+            screen: ScreenBuffer::new(&system, (0x0200, 0x0300)),
         }
     }
 
