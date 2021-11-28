@@ -247,8 +247,14 @@ impl Cpu6502 {
                 let address = self.next_u16();
                 return self.bus.borrow().read_u16(address);
             }
-            Mode::IndirectX => self.next_u8().wrapping_add(self.x) as u16,
-            Mode::IndirectY => self.next_u8().wrapping_add(self.y) as u16,
+            Mode::IndirectX => {
+                let zero_page_address = self.next_u8().wrapping_add(self.x) as u16;
+                self.bus.borrow().read_u16(zero_page_address)
+            }
+            Mode::IndirectY => {
+                let zero_page_address = self.next_u8() as u16;
+                self.bus.borrow().read_u16(zero_page_address) + self.y as u16
+            }
             // Relative addressing on the 6502 is only used for branch operations. The byte
             // after the opcode is the branch offset. If the branch is taken, the new address
             // will the the current PC plus the offset. The offset is a signed byte, so it can
