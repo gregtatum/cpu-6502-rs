@@ -6,18 +6,16 @@ use crate::util::event::{Event, Events};
 use nes::{
     asm::AddressToLabel,
     cpu_6502::Cpu6502,
+    log::{init_log, log},
     opcodes::{Mode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
+use std::io::stdout;
 use std::io::Write;
 use std::{
     collections::{HashMap, VecDeque},
     env,
     error::Error,
     io::{self, Stdout},
-};
-use std::{
-    fs::{self, OpenOptions},
-    io::stdout,
 };
 use termion::{
     event::Key,
@@ -39,28 +37,6 @@ const CYAN: Color = Color::Rgb(0, 200, 200);
 const MAGENTA: Color = Color::Rgb(200, 100, 200);
 const GRAY: Color = Color::Rgb(170, 170, 170);
 const DIM_WHITE: Color = Color::Rgb(200, 200, 200);
-
-fn init_log() {
-    match fs::File::create("log.txt") {
-        Ok(_) => {}
-        // Potential errors are that the file already exists, so just ignore it.
-        Err(_) => {}
-    };
-}
-
-fn log(text: &str) {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .open("log.txt")
-        .expect("Unable to open file");
-
-    file.write_all(text.as_bytes())
-        .expect("Failed to write file");
-
-    file.write_all("\n".as_bytes())
-        .expect("Failed to write file");
-}
 
 fn parse_cli_args() -> String {
     let args: Vec<String> = env::args().collect();
