@@ -3,10 +3,18 @@
 ; $02-03 - Pointer to memory location
 
 example_call_to_write_pixel:
-    ldx #$01 ; color
-    ldy #31  ; x position
-    lda #31  ; y position
-    jsr write_pixel
+    draw_diagonal:
+        lda $00
+        adc #$01
+        sta $00
+        tay     ; x position
+        lda $01 ; y position
+        adc #$01
+        sta $01
+        ldx #$01 ; color
+
+        jsr write_pixel
+        jmp draw_diagonal
     sleep:
     jmp sleep
 
