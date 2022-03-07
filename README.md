@@ -2,6 +2,8 @@
 
 This is a 6502 emulator, debugger, and visualizer built in Rust. It features an ASM compiler, which takes in an .asm file, and can either output the binary machine code, or load it directly in memory and run it. This project started as an NES emulator, but I decided I was having more fun just building the CPU emulator, and stopped there. I spent more time on compiler and debugger, as I found that interesting.
 
+![screenshot of debugger](screenshot.png)
+
 ## How to run
 
 The CPU debugger and visualizer can visualize the CPU running, and let you step through the code.
