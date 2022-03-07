@@ -23,6 +23,9 @@ fn main() {
 
     match ROM::load_ines_file(path) {
         Ok(rom) => {
+            if let Some(ref title) = rom.title {
+                eprintln!("Title: {:#?}", title);
+            }
             eprintln!("ROM Header: {:#?}", rom.header);
             print_characters(&rom);
         }

@@ -102,7 +102,7 @@ impl Mapper001 {
         // The RAM is optional, but is always sized 0x2000.
         let ram = match header.prg_ram_size {
             0 => None,
-            0x2000 => Some(Box::new([0; 0x2000])),
+            0x2000 => Some(Box::new([0; RAM_SIZE])),
             _ => {
                 return Err(
                     "The ROM had the incorrect sized RAM for a Mapper 001.".into()

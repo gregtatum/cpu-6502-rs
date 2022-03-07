@@ -77,6 +77,7 @@ pub struct ROM {
     // ROM dumps of all games. There might be some old hacks which use them because
     // the hackers couldn't allocate static space in the ROM for their new code.
     pub trainer: Option<Vec<u8>>,
+    pub title: Option<String>,
 }
 
 impl ROM {
@@ -112,17 +113,28 @@ impl ROM {
 
         // Some ROM-Images additionally contain a 128-byte (or sometimes 127-byte) title
         // at the end of the file.
-        let mut title = Vec::new();
-        file.read_to_end(&mut title)?;
-        if !title.is_empty() {
-            eprintln!("Found some information at the end of the file.");
-        }
+        let mut title_bytes = Vec::new();
+        file.read_to_end(&mut title_bytes)?;
+        let title = if title_bytes.is_empty() {
+            None
+        } else {
+            let mut title = String::new();
+            for ch in &title_bytes {
+                if *ch == 0 {
+                    break;
+                }
+                title.push(*ch as char);
+            }
+
+            Some(String::from(title.trim()))
+        };
 
         Ok(ROM {
             program_rom,
             character_rom,
             header,
             trainer,
+            title,
         })
     }
 }
