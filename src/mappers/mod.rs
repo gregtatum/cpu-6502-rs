@@ -1,8 +1,6 @@
-mod mapper_001;
 mod simple;
 
 // Re-export the mappers.
-pub use mapper_001::*;
 pub use simple::*;
 
 pub trait Mapper {

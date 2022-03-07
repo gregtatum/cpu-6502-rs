@@ -9,7 +9,21 @@ The CPU debugger and visualizer can visualize the CPU running, and let you step 
 See all of the [asm examples](src/bin/cpu-visualizer/asm).
 
 ```
-ls src/bin/cpu-visualizer/asm
+tree src/bin/cpu-visualizer/asm
+
+src/bin/cpu-visualizer/asm
+├── add-with-carry.asm
+├── addressing-modes.asm
+├── branching.asm
+├── compare.asm
+├── fibonacci-u16.asm
+├── fibonacci-u8.asm
+├── fill-zero-page.asm
+├── labels-with-jumps.asm
+├── logical-operators.asm
+├── register-a-modes.asm
+├── stack.asm
+└── status-flags.asm
 ```
 
 Run the `cpu-visualizer` binary with a path to the `.asm` file.
@@ -29,5 +43,5 @@ To view the logs of the visualizer append the following:
 I also built a simple game visualizer which can run the snake game from the [Easy 6502 tutorial](https://skilldrick.github.io/easy6502/).
 
 ```
-cargo run --bin simple-game assets/snake.asm
+cargo run --bin simple-game src/bin/simple-game/asm/snake.asm
 ```

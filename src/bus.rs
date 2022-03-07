@@ -1,6 +1,5 @@
-use crate::mappers::Mapper;
-
 use super::constants::memory_range;
+use crate::mappers::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
 
