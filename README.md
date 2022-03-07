@@ -34,6 +34,19 @@ Run the `cpu-visualizer` binary with a path to the `.asm` file.
 cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/fill-zero-page.asm
 ```
 
+The shortcuts for the program can be viewed by hitting `?` while using the program.
+
+```
+┌Help─────────────────────────────────────┐
+│   n - next instruction                  │
+│ 1-9 - next instructions exponentionally │
+│ h/? - show help                         │
+│   q - quit                              │
+│   a - add a page of memory              │
+│   r - remove a page of memory           │
+└─────────────────────────────────────────┘
+```
+
 To view the logs of the visualizer append the following:
 
 ```
