@@ -74,6 +74,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpu_6502"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "insta",
+ "png",
+ "rand",
+ "sdl2",
+ "termion",
+ "tui",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -177,19 +190,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791daaae1ed6889560f8c4359194f56648355540573244a5448a83ba1ecc7435"
 dependencies = [
  "adler32",
-]
-
-[[package]]
-name = "nes"
-version = "0.1.0"
-dependencies = [
- "colored",
- "insta",
- "png",
- "rand",
- "sdl2",
- "termion",
- "tui",
 ]
 
 [[package]]
