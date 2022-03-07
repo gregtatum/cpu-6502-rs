@@ -1,12 +1,12 @@
-# NES Emulator written in Rust (WIP)
+# 6502 Emulator in Rust
 
-This project is an attempt to create a NES emulator for fun. Right now I'm only attempting to emulate the MOS 6502 CPU. See [assets/notes.txt](assets/notes.txt) for my notes as I work on this.
+This is a 6502 emulator, debugger, and visualizer built in Rust. It features an ASM compiler, which takes in an .asm file, and can either output the binary machine code, or load it directly in memory and run it. This project started as an NES emulator, but I decided I was having more fun just building the CPU emulator, and stopped there. I spent more time on compiler and debugger, as I found that interesting.
 
 ## How to run
 
-The CPU visualizer is the most interactive way to look at the work so far.
+The CPU debugger and visualizer can visualize the CPU running, and let you step through the code.
 
-See all of the asm examples.
+See all of the [asm examples](src/bin/cpu-visualizer/asm).
 
 ```
 ls src/bin/cpu-visualizer/asm
@@ -26,7 +26,7 @@ To view the logs of the visualizer append the following:
 
 ## Simple Game
 
-I am currently working on getting the simple game working.
+I also built a simple game visualizer which can run the snake game from the [Easy 6502 tutorial](https://skilldrick.github.io/easy6502/).
 
 ```
 cargo run --bin simple-game assets/snake.asm

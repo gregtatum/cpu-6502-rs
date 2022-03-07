@@ -1,3 +1,5 @@
+; TODO - this is not working, as it was based on a different version of simple game.
+
 ; $00 - x position
 ; $01 - y position
 ; $02-03 - Pointer to memory location

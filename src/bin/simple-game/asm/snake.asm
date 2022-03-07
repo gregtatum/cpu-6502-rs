@@ -1,5 +1,12 @@
-; https://gist.github.com/wkjagt/9043907
+; Note from Greg Tatum:
+; This code is covered by the original licenses from the sources listed below. I believe
+; it's CC BY 4.0, Nick Morgan. I included the code here for convenience of testing the
+; simple game binary, but it is not covered by the MIT license.
 ;
+; Annotated gist: https://gist.github.com/wkjagt/9043907
+; Source code:    https://github.com/skilldrick/easy6502/
+; Tutorial:       https://skilldrick.github.io/easy6502/
+
 ;  ___           _        __ ___  __ ___
 ; / __|_ _  __ _| |_____ / /| __|/  \_  )
 ; \__ \ ' \/ _` | / / -_) _ \__ \ () / /
