@@ -1,0 +1,24 @@
+{
+  "name": "xterm-js-sys-demo",
+  "version": "0.0.0",
+  "main": "index.js",
+  "author": "Rahul Butani <rr.butani@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "watch": "parcel index.html",
+    "release": "WASM_PACK_PROFILE=release NODE_ENV=production parcel build index.html",
+    "//": "drop WASM_PACK_PROFILE=release when (if) things get merged"
+  },
+  "dependencies": {
+    "//": "switch back when xtermjs/xterm.js#2409 gets resolved: 'xterm': '^4.7.0'",
+    "xterm": "https://github.com/rrbutani/xterm.js/releases/download/4.7.0-patched/xterm-4.7.0-npm.tar.gz",
+    "xterm-addon-fit": "^0.3.0",
+    "xterm-addon-web-links": "^0.3.0"
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.4",
+    "parcel-plugin-wasm.rs": "github:rrbutani/parcel-plugin-wasm.rs",
+    "//": "^ should be switched back if/when the PR gets merged..",
+    "typescript": "^3.9.5"
+  }
+}
