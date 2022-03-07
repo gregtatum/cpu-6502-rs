@@ -13,21 +13,6 @@ mod test_helpers;
 #[cfg(test)]
 mod test;
 
-// Mhz
-const CLOCK_SPEED: f64 = 1.789773;
-// Mhz
-const CLOCK_DIVISOR: u32 = 12;
-// Emulator authors may wish to emulate the NTSC NES/Famicom CPU at 21441960 Hz
-// ((341×262-0.5)×4×60) to ensure a synchronised/stable 60 frames per second.
-// Mhz
-const MASTER_CLOCK_FREQUENCY: f64 = 21.441960;
-// This is the true frequency:
-// const MASTER_CLOCK_FREQUENCY: f64 = 21.477272;
-// Mhz
-const COLOR_SUBCARRIER_FREQUENCY: f64 = 3.57954545;
-
-const RESET_STATUS_FLAG: u8 = 0b00110100;
-
 #[rustfmt::skip]
 pub enum StatusFlag {
   Carry            = 0b00000001,
@@ -40,17 +25,7 @@ pub enum StatusFlag {
   Negative         = 0b10000000,
 }
 
-pub enum ExtraCycle {
-    None,
-    PageBoundary,
-    IfTaken,
-}
-
-pub enum Interrupt {
-    IRQ,
-}
-
-/// This struct implements the CPU for the NES, the MOS Technology 6502.
+/// This struct implements the MOS Technology 6502 central processing unit.
 ///
 /// http://www.6502.org/
 /// https://en.wikipedia.org/wiki/MOS_Technology_6502
@@ -162,7 +137,7 @@ impl Cpu6502 {
 
     /// This function is useful for testing the emulator. It will only run while the
     /// predicate is true.
-    fn run_until<F>(&mut self, predicate: F)
+    pub fn run_until<F>(&mut self, predicate: F)
     where
         F: Fn(&Cpu6502) -> bool,
     {
@@ -172,7 +147,7 @@ impl Cpu6502 {
     }
 
     /// Run the emulator until the "KIL" command is issued.
-    fn run(&mut self) {
+    pub fn run(&mut self) {
         while self.peek_u8() != OpCode::KIL as u8 {
             self.tick();
         }
@@ -461,6 +436,9 @@ impl Cpu6502 {
         self.bus.borrow().read_u16(address)
     }
 
+    /// This feature was never hooked up to any code, but it's valid (but untested)
+    /// behavior.
+    #[allow(dead_code)]
     fn handle_irq(&mut self) {
         self.push_stack_u16(self.pc);
         self.push_stack_u8(self.p);

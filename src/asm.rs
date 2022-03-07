@@ -150,6 +150,7 @@ macro_rules! iter_peek_match {
 
 type TokenizerResult = Result<(), String>;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ParseError {
     message: String,
@@ -255,10 +256,6 @@ impl<'a> AsmLexer<'a> {
             self.column += 1;
         }
         character
-    }
-
-    fn panic(&self, reason: &str) -> TokenizerResult {
-        Err(format!("{} Location: {}:{}", reason, self.row, self.column))
     }
 
     /// Run the lexer by parsing the characters into tokens. Things like labels
@@ -718,13 +715,6 @@ impl<'a> AsmLexer<'a> {
                 value, next_char
             ))
         }
-    }
-
-    fn verify_character(&self, a: char, b: char) -> TokenizerResult {
-        if a != b {
-            return Err(format!("Expected character \"{}\" to be \"{}\"", a, b));
-        }
-        Ok(())
     }
 
     /// imm = #$00

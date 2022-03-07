@@ -4,9 +4,10 @@ use super::Mapper;
 
 const PROGRAM_SIZE: usize = 0x8000;
 
-/// This is not an official part of the NES, it's a simple way to load
-/// up and test custom programs. Once the mappers get more robust, it may
-/// be worth removing this in favor of the official mappers.
+/// The NES uses mappers to map memory addresses to specific types of functions
+/// this code uses the same type of abstraction to create a simple game program
+/// that can output to the screen. This is not an official mapper for the NES,
+/// but it's a simple way to load up and test custom programs.
 pub struct SimpleProgram {
     program: [u8; 0x8000],
 }
