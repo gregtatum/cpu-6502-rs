@@ -13,6 +13,8 @@ mod test_helpers;
 #[cfg(test)]
 mod test;
 
+pub const RESET_STATUS_FLAG: u8 = 0b00110100;
+
 #[rustfmt::skip]
 pub enum StatusFlag {
   Carry            = 0b00000001,

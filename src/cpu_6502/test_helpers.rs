@@ -10,9 +10,13 @@ use crate::{
 pub const P: u8 = RESET_STATUS_FLAG;
 pub const C: u8 = StatusFlag::Carry as u8;
 pub const Z: u8 = StatusFlag::Zero as u8;
+#[allow(dead_code)]
 pub const I: u8 = StatusFlag::InterruptDisable as u8;
+#[allow(dead_code)]
 pub const D: u8 = StatusFlag::Decimal as u8;
+#[allow(dead_code)]
 pub const B: u8 = StatusFlag::Break as u8;
+#[allow(dead_code)]
 pub const T: u8 = StatusFlag::Push as u8;
 pub const V: u8 = StatusFlag::Overflow as u8;
 pub const N: u8 = StatusFlag::Negative as u8;

@@ -24,7 +24,7 @@ use termion::{
     screen::AlternateScreen,
 };
 use tui::{
-    backend::TermionBackend,
+    backend::CrosstermBackend,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
@@ -78,7 +78,7 @@ struct Visualizer {
 }
 
 type VisTerminal =
-    Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
+    Terminal<CrosstermBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 
 impl Visualizer {
     pub fn new() -> Result<Visualizer, Box<dyn Error>> {
@@ -110,7 +110,7 @@ impl Visualizer {
             let stdout = io::stdout().into_raw_mode()?;
             let stdout = MouseTerminal::from(stdout);
             let stdout = AlternateScreen::from(stdout);
-            let backend = TermionBackend::new(stdout);
+            let backend = CrosstermBackend::new(stdout);
             Terminal::new(backend)?
         };
 

@@ -8,13 +8,11 @@ edition = "2018"
 name = "cpu-visualizer"
 
 [dependencies]
-colored = "1.9"
-tui = "0.13"
+colored = "2.0"
+tui = "0.17"
 termion = "1.5"
 sdl2 = "0.35"
 rand = "0.8"
 
 [dev-dependencies]
-# Used in examples.
-png = "0.16"
 insta = { version = "1.5", features = ["ron"] }
