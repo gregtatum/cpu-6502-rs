@@ -21,6 +21,11 @@ main:
     jsr ror_register_a;
     jsr finish_test;
 
+    ; Results stored in zero page: 0x04
+    jsr prep_test;
+    jsr lsr_register_a_2;
+    jsr finish_test;
+
     kil
 
 prep_test:
@@ -32,21 +37,41 @@ prep_test:
 finish_test:
     ; Store the results incrementally in the zero page
     sta $00,x
+    ; Move the carry bit to A
+    lda #$00
+    adc #$00
+    ; Store this on the zero page as well
+    sta $20,x
     inx
     rts
 
-;; >> without carry
+; Logical shift right
+;; >> without carry being applied
 lsr_register_a:
     lda #%10101010
     lsr A
-    ; Expect %gs
+    ; Expect A: %01010101, C: 0
+    ;            ^ no carry applied
     rts
 
+; Logical shift right
+;; >> without carry being applied
+lsr_register_a_2:
+    lda #%01010101
+    lsr A
+    ; Expect A: %00101010, C: 1
+    ;            ^            ^ bit 1 was shifted into carry
+    ;            no carry applied
+    rts
+
+; Arithmetic Shift left
 ; << without carry
 asl_register_a:
     lda #%10101010
     asl A
-    ; Expect %01010100
+    ; Expect A: %01010100, C: 1
+    ;                   ^     ^ bit 7 was shifted into carry
+    ;                   The carry bit was not applied to the beginning
     rts
 
 ; Rotate left
@@ -54,7 +79,8 @@ asl_register_a:
 rol_register_a:
     lda #%10101010
     rol A
-    ; Expect %01010101
+    ; Expect A: %01010101, C: 1
+    ;                   ^ Carry bit was applied
     rts
 
 ; Rotate right
@@ -62,5 +88,6 @@ rol_register_a:
 ror_register_a:
     lda #%10101010
     ror A
-    ; Expect %11010101
+    ; Expect A: %11010101, C: 0
+    ;            ^ Carry bit was applied
     rts
