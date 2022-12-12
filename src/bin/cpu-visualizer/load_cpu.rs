@@ -386,7 +386,7 @@ mod test_cpu {
 
     #[test]
     fn test_register_a_modes() {
-        let cpu = run_cpu("register-a-modes.asm", None);
+        let cpu = run_cpu("bit-shifting.asm", None);
         insta::assert_yaml_snapshot!(get_cpu_text(&cpu), @r###"
         ---
         - "Ticks: 76"
