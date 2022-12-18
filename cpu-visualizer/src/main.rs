@@ -47,7 +47,7 @@ fn parse_cli_args() -> String {
                 "The CPU visualizer expects the first argument to be a path to a raw .asm file."
             );
             eprintln!(
-                "cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/add-with-carry.asm"
+                "cargo run -p cpu-visualizer -- crates/cpu-visualizer/asm/add-with-carry.asm"
             );
             std::process::exit(1);
         }

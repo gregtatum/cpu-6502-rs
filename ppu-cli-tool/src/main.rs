@@ -9,9 +9,7 @@ fn parse_cli_args() -> String {
             eprintln!(
                 "The nametable file viewer expects the first argument to be a path to a .nam file."
             );
-            eprintln!(
-                "cargo run --bin nam-viewer src/bin/cpu-visualizer/asm/add-with-carry.asm"
-            );
+            eprintln!("cargo run -p ppu-cli-tool -- map.nam");
             exit(1);
         }
     }

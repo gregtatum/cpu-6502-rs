@@ -1,0 +1,11 @@
+[package]
+name = "simple-game"
+version = "0.1.0"
+authors = ["Greg Tatum <tatum.creative@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cpu-6502 = { path = "../cpu-6502" }
+colored = { workspace = true }
+rand = { workspace = true }
+sdl2 = { workspace = true }

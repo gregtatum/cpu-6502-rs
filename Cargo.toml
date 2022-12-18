@@ -1,18 +1,24 @@
-[package]
-name = "cpu_6502"
-version = "0.1.0"
-authors = ["Greg Tatum <tatum.creative@gmail.com>"]
-edition = "2018"
+[workspace]
+members = [
+    "cpu-6502",
+    "cpu-visualizer",
+    "ppu-cli-tool",
+    "ppu-tool",
+    "simple-game",
+]
 
-[[bin]]
-name = "cpu-visualizer"
-
-[dependencies]
+[workspace.dependencies]
 colored = "2.0"
-tui = "0.17"
-termion = "1.5"
-sdl2 = "0.35"
+crossbeam = "0.8"
+dispatch = "0.2"
+egui = "0.20"
+egui-miniquad = "0.13"
+insta = "1.5"
+macroquad = "0.3.25"
+miniquad = "0.3.14"
+native-dialog = "0.6"
 rand = "0.8"
-
-[dev-dependencies]
-insta = { version = "1.5", features = ["ron"] }
+sdl2 = "0.35"
+structopt = "0.3"
+termion = "1.5"
+tui = "0.17"

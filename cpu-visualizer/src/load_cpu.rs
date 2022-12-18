@@ -107,7 +107,7 @@ mod test_cpu {
     fn run_cpu(filename: &str, ticks: Option<usize>) -> Cpu6502 {
         let mut path = PathBuf::new();
         path.push(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        path.push("src/bin/cpu-visualizer/asm/");
+        path.push("src/asm/");
         path.push(filename);
 
         let (mut cpu, _) = load_cpu(&path);

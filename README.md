@@ -31,7 +31,7 @@ src/bin/cpu-visualizer/asm
 Run the `cpu-visualizer` binary with a path to the `.asm` file.
 
 ```
-cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/fill-zero-page.asm
+cargo run -p cpu-visualizer -- crates/cpu-visualizer/asm/fill-zero-page.asm
 ```
 
 The shortcuts for the program can be viewed by hitting `?` while using the program.
@@ -58,5 +58,5 @@ To view the logs of the visualizer append the following:
 I also built a simple game visualizer which can run the snake game from the [Easy 6502 tutorial](https://skilldrick.github.io/easy6502/).
 
 ```
-cargo run --bin simple-game src/bin/simple-game/asm/snake.asm
+cargo run -p simple-game -- crates/simple-game/asm/snake.asm
 ```

@@ -10,11 +10,9 @@ fn parse_cli_args() -> String {
         Some(filename) => filename.clone(),
         None => {
             eprintln!(
-                "The CPU visualizer expects the first argument to be a path to a raw .asm file."
+                "The simple game expects the first argument to be a path to a raw .asm file."
             );
-            eprintln!(
-                "cargo run --bin cpu-visualizer src/bin/cpu-visualizer/asm/add-with-carry.asm"
-            );
+            eprintln!("cargo run -p simple-game crates/simple-game/asm/snake.asm");
             std::process::exit(1);
         }
     }

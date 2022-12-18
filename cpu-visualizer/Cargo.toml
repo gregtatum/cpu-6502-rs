@@ -1,0 +1,16 @@
+[package]
+name = "cpu-visualizer"
+version = "0.1.0"
+authors = ["Greg Tatum <tatum.creative@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+colored = { workspace = true }
+tui = { workspace = true }
+termion = { workspace = true }
+sdl2 = { workspace = true }
+rand = { workspace = true }
+cpu-6502 = { path = "../cpu-6502" }
+
+[dev-dependencies]
+insta = { workspace = true, features = ["yaml"] }
