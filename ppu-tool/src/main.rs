@@ -66,7 +66,7 @@ impl State {
         };
 
         // Builds the texture if it's available.
-        state.build_nametable_texture();
+        state.build_view_texture();
         state.build_chartable_texture();
 
         state
@@ -82,7 +82,7 @@ impl State {
                     self.chartable.load(path)
                 }
             }
-            self.build_nametable_texture();
+            self.build_view_texture();
             self.build_chartable_texture();
         }
     }
@@ -148,20 +148,20 @@ impl State {
 
             let tile_plane_1 = &tile_planes[0..8];
             let tile_plane_2 = &tile_planes[8..];
-            for y in 0..8 {
-                for x in 0..8 {
-                    let low_bit = (tile_plane_1[y] >> (7 - x)) & 0b0000_0001;
-                    let high_bit = if x == 7 {
-                        (tile_plane_2[y] << 1) & 0b0000_0010
+            for ch_y in 0..8 {
+                for ch_x in 0..8 {
+                    let low_bit = (tile_plane_1[ch_y] >> (7 - ch_x)) & 0b0000_0001;
+                    let high_bit = if ch_x == 7 {
+                        (tile_plane_2[ch_y] << 1) & 0b0000_0010
                     } else {
-                        (tile_plane_2[y] >> (6 - x)) & 0b0000_0010
+                        (tile_plane_2[ch_y] >> (6 - ch_x)) & 0b0000_0010
                     };
                     let value = low_bit + high_bit;
 
                     let offset = y_offset
                         + x_offset
-                        + x * RGBA_COMPONENTS
-                        + y * TILES_PER_SIDE * TILE_PIXEL_WIDTH * RGBA_COMPONENTS;
+                        + ch_x * RGBA_COMPONENTS
+                        + ch_y * TILES_PER_SIDE * TILE_PIXEL_WIDTH * RGBA_COMPONENTS;
 
                     let color = match value {
                         0 => 0,
@@ -193,6 +193,84 @@ impl State {
             &texture_data,
         ));
         self.char_egui_texture = None;
+    }
+
+    fn build_view_texture(&mut self) {
+        if self.nametable.data.is_empty() || self.chartable.data.is_empty() {
+            return;
+        }
+
+        const TILES_PER_SIDE: usize = 16;
+        const TILES_COUNT: usize = TILES_PER_SIDE * TILES_PER_SIDE;
+        const TILE_PIXEL_WIDTH: usize = 8;
+        const TILE_PIXEL_AREA: usize = TILE_PIXEL_WIDTH * TILE_PIXEL_WIDTH;
+        const PIXELS_PER_BYTE: usize = 2;
+        const RGBA_COMPONENTS: usize = 4;
+        const BYTES_PER_BIT_PLANE: usize = 8;
+        const BYTES_PER_CH_TILE: usize = BYTES_PER_BIT_PLANE + BYTES_PER_BIT_PLANE; // Two bit planes
+        const SOURCE_BYTE_LENGTH: usize = TILES_COUNT * 16;
+        const TEXTURE_BYTES: usize = W * H * RGBA_COMPONENTS * TILE_PIXEL_AREA;
+        const TEXTURE_ROW_BYTES: usize = W * RGBA_COMPONENTS * TILE_PIXEL_WIDTH;
+
+        let mut texture_data: [u8; TEXTURE_BYTES] = [0; TEXTURE_BYTES];
+        for tile_y in 0..H {
+            for tile_x in 0..W {
+                let tile_index = tile_y as usize * W + tile_x as usize;
+                let ch_lookup = self.nametable.data[tile_index];
+
+                // https://www.nesdev.org/wiki/PPU_pattern_tables
+                let ch_byte_offset =
+                    self.nametable.data[tile_index] as usize * BYTES_PER_CH_TILE;
+                let offsets = (
+                    ch_byte_offset,
+                    ch_byte_offset + BYTES_PER_BIT_PLANE,
+                    ch_byte_offset + BYTES_PER_BIT_PLANE + BYTES_PER_BIT_PLANE,
+                );
+                let ch_plane_1 = &self.chartable.data[offsets.0..offsets.1];
+                let ch_plane_2 = &self.chartable.data[offsets.1..offsets.2];
+
+                let x_offset = RGBA_COMPONENTS * tile_x * TILE_PIXEL_WIDTH;
+                let y_offset = RGBA_COMPONENTS * tile_y * TILE_PIXEL_AREA * W;
+
+                for ch_y in 0..8 {
+                    for ch_x in 0..8 {
+                        let low_bit = (ch_plane_1[ch_y] >> (7 - ch_x)) & 0b0000_0001;
+                        let high_bit = if ch_x == 7 {
+                            (ch_plane_2[ch_y] << 1) & 0b0000_0010
+                        } else {
+                            (ch_plane_2[ch_y] >> (6 - ch_x)) & 0b0000_0010
+                        };
+
+                        let value = low_bit + high_bit;
+
+                        let color = match value {
+                            0 => 0,
+                            1 => 85,
+                            2 => 170,
+                            3 => 255,
+                            _ => panic!("Logic error in bitshifting."),
+                        };
+
+                        let offset = y_offset
+                            + x_offset
+                            + ch_x * RGBA_COMPONENTS
+                            + ch_y * TEXTURE_ROW_BYTES;
+
+                        texture_data[offset] = color;
+                        texture_data[offset + 1] = color;
+                        texture_data[offset + 2] = color;
+                        texture_data[offset + 3] = 0xff;
+                    }
+                }
+            }
+        }
+        let texture = Texture2D::from_rgba8(
+            (W * TILE_PIXEL_WIDTH) as u16,
+            (H * TILE_PIXEL_WIDTH) as u16,
+            &texture_data,
+        );
+        texture.set_filter(FilterMode::Nearest);
+        self.texture = Some(texture);
     }
 }
 
