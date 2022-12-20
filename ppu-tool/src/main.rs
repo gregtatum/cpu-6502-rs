@@ -16,13 +16,17 @@ struct State {
     pub background: Color,
     pub channel_sender: Sender<ThreadMessage>,
     pub channel_receiver: Receiver<ThreadMessage>,
+
     pub nametable: UserBinaryFile,
     pub chartable: UserBinaryFile,
-    pub palettes_file: UserBinaryFile,
     pub texture: Option<Texture2D>,
+
     pub char_texture: Option<Texture2D>,
     pub char_egui_texture: Option<egui::TextureHandle>,
     pub char_egui_image: Option<egui::ColorImage>,
+
+    pub palette_change: PaletteChange,
+    pub palettes_file: UserBinaryFile,
     pub palettes: [[u8; 4]; 4],
 }
 // NTSC 720x480 display, but 720x534 display due to pixel aspect ratio.
@@ -33,6 +37,13 @@ const SIDE_PANEL_MARGIN: f32 = 7.0;
 const SIDE_PANEL_WIDTH: f32 =
     SIDE_PANEL_INNER_WIDTH + SIDE_PANEL_MARGIN + SIDE_PANEL_MARGIN;
 const PALETTE_SWATCH_SIZE: f32 = 22.0;
+
+#[derive(Clone, Copy)]
+struct PaletteChange {
+    palette_index: u8,
+    color_index: u8,
+    is_open: bool,
+}
 
 impl State {
     pub fn new() -> State {
@@ -75,6 +86,12 @@ impl State {
             char_texture: None,
             char_egui_texture: None,
             char_egui_image: None,
+
+            palette_change: PaletteChange {
+                palette_index: 0,
+                color_index: 0,
+                is_open: false,
+            },
             palettes_file,
             palettes: [
                 [0x22, 0x29, 0x1a, 0x0f],
@@ -108,6 +125,7 @@ impl State {
                             self.palettes_file.data.len()
                         );
                     }
+                    println!("Loading palettes");
                     for (i, v) in self.palettes_file.data.iter().enumerate() {
                         self.palettes[i / 4][i % 4] = *v;
                     }
@@ -349,6 +367,7 @@ async fn run() {
         }
 
         state.borrow_mut().update();
+        let mut is_change_palette_open = state.borrow().palette_change.is_open;
 
         clear_background(Color::from(state.borrow().background));
 
@@ -385,7 +404,25 @@ async fn run() {
         // }
 
         egui_mq::ui(|egui_ctx| {
-            let panel = egui::SidePanel::right("side-panel")
+            egui::Window::new("Change Palette")
+                .open(&mut is_change_palette_open)
+                .show(egui_ctx, |ui| {
+                    ui.label("Color");
+                    for row in 0..4 {
+                        ui.horizontal_top(|ui| {
+                            for column in 0..16 {
+                                add_color_button(&state, ui, row * 16 + column);
+                            }
+                        });
+                    }
+                });
+
+            if !is_change_palette_open {
+                // The user closed the palette.
+                state.borrow_mut().palette_change.is_open = false;
+            }
+
+            egui::SidePanel::right("side-panel")
                 .exact_width(SIDE_PANEL_WIDTH)
                 .resizable(false)
                 .show(egui_ctx, |ui| {
@@ -451,28 +488,27 @@ async fn run() {
                         state.borrow_mut().palettes_file.request_new_file();
                     }
 
-                    let palettes = state.borrow().palettes.clone();
                     ui.horizontal_top(|ui| {
-                        add_swatch_button(ui, palettes[0][0]);
-                        add_swatch_button(ui, palettes[0][1]);
-                        add_swatch_button(ui, palettes[0][2]);
-                        add_swatch_button(ui, palettes[0][3]);
+                        add_swatch_button(&state, ui, 0, 0);
+                        add_swatch_button(&state, ui, 0, 1);
+                        add_swatch_button(&state, ui, 0, 2);
+                        add_swatch_button(&state, ui, 0, 3);
                         ui.add_space(20.0);
-                        add_swatch_button(ui, palettes[1][0]);
-                        add_swatch_button(ui, palettes[1][1]);
-                        add_swatch_button(ui, palettes[1][2]);
-                        add_swatch_button(ui, palettes[1][3]);
+                        add_swatch_button(&state, ui, 1, 0);
+                        add_swatch_button(&state, ui, 1, 1);
+                        add_swatch_button(&state, ui, 1, 2);
+                        add_swatch_button(&state, ui, 1, 3);
                     });
                     ui.horizontal_top(|ui| {
-                        add_swatch_button(ui, palettes[2][0]);
-                        add_swatch_button(ui, palettes[2][1]);
-                        add_swatch_button(ui, palettes[2][2]);
-                        add_swatch_button(ui, palettes[2][3]);
+                        add_swatch_button(&state, ui, 2, 0);
+                        add_swatch_button(&state, ui, 2, 1);
+                        add_swatch_button(&state, ui, 2, 2);
+                        add_swatch_button(&state, ui, 2, 3);
                         ui.add_space(20.0);
-                        add_swatch_button(ui, palettes[3][0]);
-                        add_swatch_button(ui, palettes[3][1]);
-                        add_swatch_button(ui, palettes[3][2]);
-                        add_swatch_button(ui, palettes[3][3]);
+                        add_swatch_button(&state, ui, 3, 0);
+                        add_swatch_button(&state, ui, 3, 1);
+                        add_swatch_button(&state, ui, 3, 2);
+                        add_swatch_button(&state, ui, 3, 3);
                     });
                 });
         });
@@ -487,8 +523,8 @@ async fn run() {
     }
 }
 
-fn add_swatch_button(ui: &mut egui::Ui, palette_index: u8) {
-    let color = NTSC_PALETTE[palette_index as usize];
+fn color_button(ui: &mut egui::Ui, ntsc_index: u8) -> egui::Response {
+    let color = &NTSC_PALETTE[ntsc_index as usize];
     ui.add(
         egui::Button::new("")
             .fill(egui::Color32::from_rgb(color[0], color[1], color[2]))
@@ -497,5 +533,36 @@ fn add_swatch_button(ui: &mut egui::Ui, palette_index: u8) {
                 egui::Color32::from_rgb(128, 128, 128),
             ))
             .min_size([PALETTE_SWATCH_SIZE, PALETTE_SWATCH_SIZE].into()),
+    )
+}
+
+fn add_swatch_button(
+    state: &RefCell<State>,
+    ui: &mut egui::Ui,
+    palette_index: u8,
+    color_index: u8,
+) {
+    let response = color_button(
+        ui,
+        state.borrow().palettes[palette_index as usize][color_index as usize],
     );
+
+    if response.clicked() {
+        state.borrow_mut().palette_change = PaletteChange {
+            palette_index,
+            color_index,
+            is_open: true,
+        };
+    }
+}
+
+fn add_color_button(state: &RefCell<State>, ui: &mut egui::Ui, ntsc_index: u8) {
+    let response = color_button(ui, ntsc_index);
+
+    if response.clicked() {
+        let palette_change = state.borrow().palette_change;
+        state.borrow_mut().palettes[palette_change.palette_index as usize]
+            [palette_change.color_index as usize] = ntsc_index as u8;
+        state.borrow_mut().palette_change.is_open = false;
+    }
 }
