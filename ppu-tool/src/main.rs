@@ -102,6 +102,7 @@ impl State {
         };
 
         // Builds the texture if it's available.
+        state.build_palettes();
         state.build_view_texture();
         state.build_chartable_texture();
 
@@ -119,20 +120,27 @@ impl State {
                 }
                 ThreadMessage::NewBinaryFile(BinaryFileId::PaletteFile, path) => {
                     self.palettes_file.load(path);
-                    if self.palettes_file.data.len() != 16 {
-                        eprintln!(
-                            "Invalid palette file. Expected a 16 byte file but a {} byte file was received.",
-                            self.palettes_file.data.len()
-                        );
-                    }
-                    println!("Loading palettes");
-                    for (i, v) in self.palettes_file.data.iter().enumerate() {
-                        self.palettes[i / 4][i % 4] = *v;
-                    }
+                    self.build_palettes();
                 }
             }
             self.build_view_texture();
             self.build_chartable_texture();
+        }
+    }
+
+    fn build_palettes(&mut self) {
+        if self.palettes_file.data.len() == 0 {
+            // No palette data yet.
+            return;
+        }
+        if self.palettes_file.data.len() != 16 {
+            eprintln!(
+                "Invalid palette file. Expected a 16 byte file but a {} byte file was received.",
+                self.palettes_file.data.len()
+            );
+        }
+        for (i, v) in self.palettes_file.data.iter().enumerate() {
+            self.palettes[i / 4][i % 4] = *v;
         }
     }
 
@@ -292,22 +300,21 @@ impl State {
 
                         let value = low_bit + high_bit;
 
-                        let color = match value {
-                            0 => 0,
-                            1 => 85,
-                            2 => 170,
-                            3 => 255,
-                            _ => panic!("Logic error in bitshifting."),
-                        };
+                        if value > 3 {
+                            panic!("Logic error in bit shifting.");
+                        }
+
+                        let color =
+                            NTSC_PALETTE[self.palettes[0][value as usize] as usize];
 
                         let offset = y_offset
                             + x_offset
                             + ch_x * RGBA_COMPONENTS
                             + ch_y * TEXTURE_ROW_BYTES;
 
-                        texture_data[offset] = color;
-                        texture_data[offset + 1] = color;
-                        texture_data[offset + 2] = color;
+                        texture_data[offset] = color[0];
+                        texture_data[offset + 1] = color[1];
+                        texture_data[offset + 2] = color[2];
                         texture_data[offset + 3] = 0xff;
                     }
                 }
@@ -404,10 +411,13 @@ async fn run() {
         // }
 
         egui_mq::ui(|egui_ctx| {
-            egui::Window::new("Change Palette")
+            egui::Window::new("Change Color")
                 .open(&mut is_change_palette_open)
+                .collapsible(false)
+                .auto_sized()
+                // 485 is the measured window size, 320 just seemed like a nice default.
+                .default_pos((TEXTURE_DISPLAY_W - 485.0, 320.0))
                 .show(egui_ctx, |ui| {
-                    ui.label("Color");
                     for row in 0..4 {
                         ui.horizontal_top(|ui| {
                             for column in 0..16 {
@@ -426,89 +436,94 @@ async fn run() {
                 .exact_width(SIDE_PANEL_WIDTH)
                 .resizable(false)
                 .show(egui_ctx, |ui| {
-                    ui.label("Nametable:");
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.label("Nametable:");
 
-                    let open_button = ui.add(egui::widgets::Button::new(
-                        match state.borrow().nametable.filename {
-                            Some(ref filename) => filename,
-                            None => "Choose…",
-                        },
-                    ));
-                    if open_button.clicked() {
-                        state.borrow_mut().nametable.request_new_file();
-                    }
-
-                    ui.separator();
-
-                    ui.label("Chartable");
-                    let open_button = ui.add(egui::widgets::Button::new(
-                        match state.borrow().chartable.filename {
-                            Some(ref filename) => filename,
-                            None => "Choose…",
-                        },
-                    ));
-                    if open_button.clicked() {
-                        state.borrow_mut().chartable.request_new_file();
-                    }
-
-                    // Maybe initialize the character texture.
-                    if state.borrow().char_egui_texture.is_none() {
-                        let image = state.borrow_mut().char_egui_image.take();
-                        if let Some(image) = image {
-                            state.borrow_mut().char_egui_texture =
-                                Some(ui.ctx().load_texture(
-                                    "char table",
-                                    image,
-                                    egui::TextureOptions {
-                                        magnification: egui::TextureFilter::Nearest,
-                                        minification: egui::TextureFilter::Nearest,
-                                    },
-                                ));
+                        let open_button =
+                            ui.add(egui::widgets::Button::new(
+                                match state.borrow().nametable.filename {
+                                    Some(ref filename) => filename,
+                                    None => "Choose…",
+                                },
+                            ));
+                        if open_button.clicked() {
+                            state.borrow_mut().nametable.request_new_file();
                         }
-                    }
 
-                    if let Some(ref texture) = state.borrow().char_egui_texture {
-                        ui.image(
-                            texture,
-                            [SIDE_PANEL_INNER_WIDTH, SIDE_PANEL_INNER_WIDTH],
-                        );
-                    }
+                        ui.separator();
 
-                    ui.separator();
+                        ui.label("Chartable");
+                        let open_button =
+                            ui.add(egui::widgets::Button::new(
+                                match state.borrow().chartable.filename {
+                                    Some(ref filename) => filename,
+                                    None => "Choose…",
+                                },
+                            ));
+                        if open_button.clicked() {
+                            state.borrow_mut().chartable.request_new_file();
+                        }
 
-                    ui.label("Palettes");
+                        // Maybe initialize the character texture.
+                        if state.borrow().char_egui_texture.is_none() {
+                            let image = state.borrow_mut().char_egui_image.take();
+                            if let Some(image) = image {
+                                state.borrow_mut().char_egui_texture =
+                                    Some(ui.ctx().load_texture(
+                                        "char table",
+                                        image,
+                                        egui::TextureOptions {
+                                            magnification: egui::TextureFilter::Nearest,
+                                            minification: egui::TextureFilter::Nearest,
+                                        },
+                                    ));
+                            }
+                        }
 
-                    let open_button = ui.add(egui::widgets::Button::new(
-                        match state.borrow().palettes_file.filename {
-                            Some(ref filename) => filename,
-                            None => "Choose…",
-                        },
-                    ));
-                    if open_button.clicked() {
-                        state.borrow_mut().palettes_file.request_new_file();
-                    }
+                        if let Some(ref texture) = state.borrow().char_egui_texture {
+                            ui.image(
+                                texture,
+                                [SIDE_PANEL_INNER_WIDTH, SIDE_PANEL_INNER_WIDTH],
+                            );
+                        }
 
-                    ui.horizontal_top(|ui| {
-                        add_swatch_button(&state, ui, 0, 0);
-                        add_swatch_button(&state, ui, 0, 1);
-                        add_swatch_button(&state, ui, 0, 2);
-                        add_swatch_button(&state, ui, 0, 3);
-                        ui.add_space(20.0);
-                        add_swatch_button(&state, ui, 1, 0);
-                        add_swatch_button(&state, ui, 1, 1);
-                        add_swatch_button(&state, ui, 1, 2);
-                        add_swatch_button(&state, ui, 1, 3);
-                    });
-                    ui.horizontal_top(|ui| {
-                        add_swatch_button(&state, ui, 2, 0);
-                        add_swatch_button(&state, ui, 2, 1);
-                        add_swatch_button(&state, ui, 2, 2);
-                        add_swatch_button(&state, ui, 2, 3);
-                        ui.add_space(20.0);
-                        add_swatch_button(&state, ui, 3, 0);
-                        add_swatch_button(&state, ui, 3, 1);
-                        add_swatch_button(&state, ui, 3, 2);
-                        add_swatch_button(&state, ui, 3, 3);
+                        ui.separator();
+
+                        ui.label("Palettes");
+
+                        let open_button =
+                            ui.add(egui::widgets::Button::new(
+                                match state.borrow().palettes_file.filename {
+                                    Some(ref filename) => filename,
+                                    None => "Choose…",
+                                },
+                            ));
+                        if open_button.clicked() {
+                            state.borrow_mut().palettes_file.request_new_file();
+                        }
+
+                        ui.horizontal_top(|ui| {
+                            add_swatch_button(&state, ui, 0, 0);
+                            add_swatch_button(&state, ui, 0, 1);
+                            add_swatch_button(&state, ui, 0, 2);
+                            add_swatch_button(&state, ui, 0, 3);
+                            ui.add_space(20.0);
+                            add_swatch_button(&state, ui, 1, 0);
+                            add_swatch_button(&state, ui, 1, 1);
+                            add_swatch_button(&state, ui, 1, 2);
+                            add_swatch_button(&state, ui, 1, 3);
+                        });
+                        ui.horizontal_top(|ui| {
+                            add_swatch_button(&state, ui, 2, 0);
+                            add_swatch_button(&state, ui, 2, 1);
+                            add_swatch_button(&state, ui, 2, 2);
+                            add_swatch_button(&state, ui, 2, 3);
+                            ui.add_space(20.0);
+                            add_swatch_button(&state, ui, 3, 0);
+                            add_swatch_button(&state, ui, 3, 1);
+                            add_swatch_button(&state, ui, 3, 2);
+                            add_swatch_button(&state, ui, 3, 3);
+                        });
                     });
                 });
         });
@@ -564,5 +579,6 @@ fn add_color_button(state: &RefCell<State>, ui: &mut egui::Ui, ntsc_index: u8) {
         state.borrow_mut().palettes[palette_change.palette_index as usize]
             [palette_change.color_index as usize] = ntsc_index as u8;
         state.borrow_mut().palette_change.is_open = false;
+        state.borrow_mut().build_view_texture();
     }
 }
