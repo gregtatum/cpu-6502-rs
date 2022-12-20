@@ -74,6 +74,7 @@ impl miniquad::EventHandler for Shortcuts {
 pub enum BinaryFileId {
     NameTable,
     CharTable,
+    PaletteFile,
 }
 
 pub enum ThreadMessage {

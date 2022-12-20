@@ -8,3 +8,4 @@ pub mod cpu_6502;
 pub mod log;
 pub mod mappers;
 pub mod opcodes;
+pub mod ppu;

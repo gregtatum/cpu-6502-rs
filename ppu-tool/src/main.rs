@@ -3,6 +3,7 @@
 mod egui_mq;
 mod utils;
 
+use cpu_6502::ppu::NTSC_PALETTE;
 use crossbeam::atomic::AtomicCell;
 use macroquad::{self as mq, prelude::*};
 use std::rc::Rc;
@@ -17,10 +18,12 @@ struct State {
     pub channel_receiver: Receiver<ThreadMessage>,
     pub nametable: UserBinaryFile,
     pub chartable: UserBinaryFile,
+    pub palettes_file: UserBinaryFile,
     pub texture: Option<Texture2D>,
     pub char_texture: Option<Texture2D>,
     pub char_egui_texture: Option<egui::TextureHandle>,
     pub char_egui_image: Option<egui::ColorImage>,
+    pub palettes: [[u8; 4]; 4],
 }
 // NTSC 720x480 display, but 720x534 display due to pixel aspect ratio.
 const TEXTURE_DISPLAY_W: f32 = 720.0;
@@ -29,12 +32,14 @@ const SIDE_PANEL_INNER_WIDTH: f32 = 256.0;
 const SIDE_PANEL_MARGIN: f32 = 7.0;
 const SIDE_PANEL_WIDTH: f32 =
     SIDE_PANEL_INNER_WIDTH + SIDE_PANEL_MARGIN + SIDE_PANEL_MARGIN;
+const PALETTE_SWATCH_SIZE: f32 = 22.0;
 
 impl State {
     pub fn new() -> State {
         let CliOptions {
             nametable,
             chartable,
+            palette,
         } = CliOptions::from_args();
 
         let (channel_sender, channel_receiver) = channel();
@@ -52,6 +57,13 @@ impl State {
             chartable,
             channel_sender.clone(),
         );
+        let palettes_file = UserBinaryFile::new(
+            BinaryFileId::PaletteFile,
+            vec!["pal"],
+            "NES Palette File",
+            palette,
+            channel_sender.clone(),
+        );
 
         let mut state = State {
             background: BEIGE,
@@ -63,6 +75,13 @@ impl State {
             char_texture: None,
             char_egui_texture: None,
             char_egui_image: None,
+            palettes_file,
+            palettes: [
+                [0x22, 0x29, 0x1a, 0x0f],
+                [0x22, 0x36, 0x17, 0x0f],
+                [0x22, 0x30, 0x21, 0x0f],
+                [0x22, 0x27, 0x17, 0x0f],
+            ],
         };
 
         // Builds the texture if it's available.
@@ -80,6 +99,18 @@ impl State {
                 }
                 ThreadMessage::NewBinaryFile(BinaryFileId::CharTable, path) => {
                     self.chartable.load(path)
+                }
+                ThreadMessage::NewBinaryFile(BinaryFileId::PaletteFile, path) => {
+                    self.palettes_file.load(path);
+                    if self.palettes_file.data.len() != 16 {
+                        eprintln!(
+                            "Invalid palette file. Expected a 16 byte file but a {} byte file was received.",
+                            self.palettes_file.data.len()
+                        );
+                    }
+                    for (i, v) in self.palettes_file.data.iter().enumerate() {
+                        self.palettes[i / 4][i % 4] = *v;
+                    }
                 }
             }
             self.build_view_texture();
@@ -285,6 +316,9 @@ struct CliOptions {
     /// The path to a character table (.chr)
     #[structopt(short, long)]
     chartable: Option<PathBuf>,
+    /// The path to a palette file (.pal)
+    #[structopt(short, long)]
+    palette: Option<PathBuf>,
 }
 
 const W: usize = 32;
@@ -404,6 +438,42 @@ async fn run() {
                     }
 
                     ui.separator();
+
+                    ui.label("Palettes");
+
+                    let open_button = ui.add(egui::widgets::Button::new(
+                        match state.borrow().palettes_file.filename {
+                            Some(ref filename) => filename,
+                            None => "Choose…",
+                        },
+                    ));
+                    if open_button.clicked() {
+                        state.borrow_mut().palettes_file.request_new_file();
+                    }
+
+                    let palettes = state.borrow().palettes.clone();
+                    ui.horizontal_top(|ui| {
+                        add_swatch_button(ui, palettes[0][0]);
+                        add_swatch_button(ui, palettes[0][1]);
+                        add_swatch_button(ui, palettes[0][2]);
+                        add_swatch_button(ui, palettes[0][3]);
+                        ui.add_space(20.0);
+                        add_swatch_button(ui, palettes[1][0]);
+                        add_swatch_button(ui, palettes[1][1]);
+                        add_swatch_button(ui, palettes[1][2]);
+                        add_swatch_button(ui, palettes[1][3]);
+                    });
+                    ui.horizontal_top(|ui| {
+                        add_swatch_button(ui, palettes[2][0]);
+                        add_swatch_button(ui, palettes[2][1]);
+                        add_swatch_button(ui, palettes[2][2]);
+                        add_swatch_button(ui, palettes[2][3]);
+                        ui.add_space(20.0);
+                        add_swatch_button(ui, palettes[3][0]);
+                        add_swatch_button(ui, palettes[3][1]);
+                        add_swatch_button(ui, palettes[3][2]);
+                        add_swatch_button(ui, palettes[3][3]);
+                    });
                 });
         });
 
@@ -415,4 +485,17 @@ async fn run() {
 
         next_frame().await;
     }
+}
+
+fn add_swatch_button(ui: &mut egui::Ui, palette_index: u8) {
+    let color = NTSC_PALETTE[palette_index as usize];
+    ui.add(
+        egui::Button::new("")
+            .fill(egui::Color32::from_rgb(color[0], color[1], color[2]))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(128, 128, 128),
+            ))
+            .min_size([PALETTE_SWATCH_SIZE, PALETTE_SWATCH_SIZE].into()),
+    );
 }

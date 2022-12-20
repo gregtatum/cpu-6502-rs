@@ -1092,6 +1092,7 @@ dependencies = [
 name = "ppu-tool"
 version = "0.1.0"
 dependencies = [
+ "cpu-6502",
  "crossbeam",
  "dispatch",
  "egui",

@@ -12,3 +12,4 @@ native-dialog = { workspace = true }
 crossbeam = { workspace = true }
 dispatch = { workspace = true }
 egui-miniquad = { workspace = true }
+cpu-6502 = { path = "../cpu-6502" }
