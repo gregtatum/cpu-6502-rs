@@ -54,6 +54,7 @@ pub fn ui<F: FnOnce(&egui::Context)>(f: F) {
 }
 
 /// Configure egui without beginning or ending a frame.
+#[allow(dead_code)]
 pub fn cfg<F: FnOnce(&egui::Context)>(f: F) {
     f(get_egui().0.egui_ctx());
 }
@@ -116,7 +117,12 @@ impl mq::EventHandler for Egui {
         self.0.key_down_event(ctx, keycode, keymods);
     }
 
-    fn key_up_event(&mut self, _ctx: &mut mq::Context, keycode: mq::KeyCode, keymods: mq::KeyMods) {
+    fn key_up_event(
+        &mut self,
+        _ctx: &mut mq::Context,
+        keycode: mq::KeyCode,
+        keymods: mq::KeyMods,
+    ) {
         self.0.key_up_event(keycode, keymods);
     }
 }
