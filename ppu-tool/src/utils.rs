@@ -1,11 +1,6 @@
-use crossbeam::atomic::AtomicCell;
 use egui::epaint::Hsva;
 use native_dialog::FileDialog;
-use std::{
-    path::PathBuf,
-    rc::Rc,
-    sync::{mpsc::Sender, Arc},
-};
+use std::{path::PathBuf, sync::mpsc::Sender};
 
 pub trait ColorConvert {
     fn into_egui_hsva(&self) -> egui::ecolor::Hsva;
@@ -155,12 +150,16 @@ impl UserBinaryFile {
                 .show_open_single_file()
             {
                 Ok(Some(p)) => {
-                    channel_sender.send(ThreadMessage::NewBinaryFile(id, p));
+                    if let Err(err) =
+                        channel_sender.send(ThreadMessage::NewBinaryFile(id, p))
+                    {
+                        eprintln!("Problem sending message {:?}", err);
+                    };
                 }
-                _ => {}
                 Err(err) => {
                     eprintln!("Unable to open nametable file. {:?}", err);
                 }
+                _ => {}
             }
         });
     }

@@ -4,13 +4,10 @@ mod egui_mq;
 mod utils;
 
 use cpu_6502::ppu::NTSC_PALETTE;
-use crossbeam::atomic::AtomicCell;
 use macroquad::{self as mq, prelude::*};
-use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
 use std::{cell::RefCell, path::PathBuf};
-use utils::{BinaryFileId, ColorConvert, Shortcuts, ThreadMessage, UserBinaryFile};
+use utils::{BinaryFileId, Shortcuts, ThreadMessage, UserBinaryFile};
 
 struct State {
     pub background: Color,
@@ -173,7 +170,6 @@ impl State {
         const TILES_PER_SIDE: usize = 16;
         const TILES_COUNT: usize = TILES_PER_SIDE * TILES_PER_SIDE;
         const TILE_PIXEL_WIDTH: usize = 8;
-        const PIXELS_PER_BYTE: usize = 2;
         const RGBA_COMPONENTS: usize = 4;
         const SOURCE_BYTE_LENGTH: usize = TILES_COUNT * 16;
         const TEXTURE_BYTES: usize = TILES_PER_SIDE
@@ -194,8 +190,8 @@ impl State {
         let mut texture_data: [u8; TEXTURE_BYTES] = [0; TEXTURE_BYTES];
 
         for (tile_index, tile_planes) in self.chartable.data.chunks(16).enumerate() {
-            let tile_x = (tile_index % TILES_PER_SIDE);
-            let tile_y = (tile_index / TILES_PER_SIDE);
+            let tile_x = tile_index % TILES_PER_SIDE;
+            let tile_y = tile_index / TILES_PER_SIDE;
             let x_offset = tile_x * TILE_PIXEL_WIDTH * RGBA_COMPONENTS;
             let y_offset = tile_y
                 * TILES_PER_SIDE
@@ -257,15 +253,11 @@ impl State {
             return;
         }
 
-        const TILES_PER_SIDE: usize = 16;
-        const TILES_COUNT: usize = TILES_PER_SIDE * TILES_PER_SIDE;
         const TILE_PIXEL_WIDTH: usize = 8;
         const TILE_PIXEL_AREA: usize = TILE_PIXEL_WIDTH * TILE_PIXEL_WIDTH;
-        const PIXELS_PER_BYTE: usize = 2;
         const RGBA_COMPONENTS: usize = 4;
         const BYTES_PER_BIT_PLANE: usize = 8;
         const BYTES_PER_CH_TILE: usize = BYTES_PER_BIT_PLANE + BYTES_PER_BIT_PLANE; // Two bit planes
-        const SOURCE_BYTE_LENGTH: usize = TILES_COUNT * 16;
         const TEXTURE_BYTES: usize = W * H * RGBA_COMPONENTS * TILE_PIXEL_AREA;
         const TEXTURE_ROW_BYTES: usize = W * RGBA_COMPONENTS * TILE_PIXEL_WIDTH;
 
@@ -273,7 +265,6 @@ impl State {
         for tile_y in 0..H {
             for tile_x in 0..W {
                 let tile_index = tile_y as usize * W + tile_x as usize;
-                let ch_lookup = self.nametable.data[tile_index];
 
                 // https://www.nesdev.org/wiki/PPU_pattern_tables
                 let ch_byte_offset =
@@ -393,22 +384,6 @@ async fn run() {
                 },
             );
         }
-
-        // if let Some(texture) = state.borrow().char_texture {
-        //     draw_texture_ex(
-        //         texture,
-        //         0.0,
-        //         0.0,
-        //         WHITE,
-        //         DrawTextureParams {
-        //             dest_size: Some(vec2(
-        //                 screen_width() - SIDE_PANEL_WIDTH,
-        //                 screen_height(),
-        //             )),
-        //             ..Default::default()
-        //         },
-        //     );
-        // }
 
         egui_mq::ui(|egui_ctx| {
             egui::Window::new("Change Color")

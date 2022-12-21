@@ -9,7 +9,6 @@ members = [
 
 [workspace.dependencies]
 colored = "2.0"
-crossbeam = "0.8"
 dispatch = "0.2"
 egui = "0.20"
 egui-miniquad = "0.13"
