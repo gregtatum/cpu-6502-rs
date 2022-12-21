@@ -10,3 +10,5 @@ pub const SIDE_PANEL_MARGIN: f32 = 7.0;
 pub const SIDE_PANEL_WIDTH: f32 =
     SIDE_PANEL_INNER_WIDTH + SIDE_PANEL_MARGIN + SIDE_PANEL_MARGIN;
 pub const PALETTE_SWATCH_SIZE: f32 = 22.0;
+// This is the distance the attributes are offset in the nametable data.
+pub const ATTRIBUTES_OFFSET: usize = 0x3c0;

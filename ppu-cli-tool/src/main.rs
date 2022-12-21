@@ -141,9 +141,9 @@ fn visualize_attributes(slice: &[u8]) {
         for byte in window {
             let tr = (byte & tr_mask) >> 2;
             let tl = byte & tl_mask;
-            print_attribute(tr);
-            print!(" ");
             print_attribute(tl);
+            print!(" ");
+            print_attribute(tr);
             print!(" ");
         }
         println!("{}", "│".dimmed());
@@ -152,9 +152,9 @@ fn visualize_attributes(slice: &[u8]) {
         for byte in window {
             let br = (byte & br_mask) >> 6;
             let bl = (byte & bl_mask) >> 4;
-            print_attribute(br);
-            print!(" ");
             print_attribute(bl);
+            print!(" ");
+            print_attribute(br);
             print!(" ");
         }
         println!("{}", "│".dimmed());

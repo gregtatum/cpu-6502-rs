@@ -269,6 +269,8 @@ impl State {
                 let x_offset = RGBA_COMPONENTS * tile_x * TILE_PIXEL_WIDTH;
                 let y_offset = RGBA_COMPONENTS * tile_y * TILE_PIXEL_AREA * NAMETABLE_W;
 
+                let palette = self.lookup_attribute_palette(tile_x, tile_y);
+
                 for ch_y in 0..8 {
                     for ch_x in 0..8 {
                         let low_bit = (ch_plane_1[ch_y] >> (7 - ch_x)) & 0b0000_0001;
@@ -284,14 +286,12 @@ impl State {
                             panic!("Logic error in bit shifting.");
                         }
 
-                        let color =
-                            NTSC_PALETTE[self.palettes[0][value as usize] as usize];
-
                         let offset = y_offset
                             + x_offset
                             + ch_x * RGBA_COMPONENTS
                             + ch_y * TEXTURE_ROW_BYTES;
 
+                        let color = NTSC_PALETTE[palette[value as usize] as usize];
                         texture_data[offset] = color[0];
                         texture_data[offset + 1] = color[1];
                         texture_data[offset + 2] = color[2];
@@ -307,6 +307,31 @@ impl State {
         );
         texture.set_filter(FilterMode::Nearest);
         self.texture = Some(texture);
+    }
+
+    fn lookup_attribute_palette(&self, tile_x: usize, tile_y: usize) -> [u8; 4] {
+        // Each byte has 2 tiles, and each attribute covers 2 tiles, so 2 * 2 = 4.
+        let index = ATTRIBUTES_OFFSET + (tile_x >> 2) + (tile_y >> 2) * 8;
+        let byte = self.nametable.data[index];
+
+        // 7654 3210
+        // |||| ||++- Color bits 3-2 for top left quadrant of this byte
+        // |||| ++--- Color bits 3-2 for top right quadrant of this byte
+        // ||++------ Color bits 3-2 for bottom left quadrant of this byte
+        // ++-------- Color bits 3-2 for bottom right quadrant of this byte
+        let br_mask = 0b1100_0000;
+        let bl_mask = 0b0011_0000;
+        let tr_mask = 0b0000_1100;
+        let tl_mask = 0b0000_0011;
+
+        let attribute = match (tile_x >> 1) & 0b1 | (((tile_y >> 1) & 0b1) << 1) {
+            0b00 => byte & tl_mask,        // tl
+            0b01 => (byte & tr_mask) >> 2, // tr
+            0b10 => (byte & bl_mask) >> 4, // bl
+            0b11 => (byte & br_mask) >> 6, // br
+            _ => unreachable!("Logic error"),
+        };
+        self.palettes[attribute as usize]
     }
 }
 
