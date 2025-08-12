@@ -9,6 +9,7 @@ use std::{
 pub struct State {
     pub shortcuts: Shortcuts,
     pub background: Color,
+    pub view: View,
     pub channel_sender: Sender<ThreadMessage>,
     pub channel_receiver: Receiver<ThreadMessage>,
 
@@ -55,6 +56,7 @@ impl State {
         );
 
         let mut state = State {
+            view: View::FileViewer,
             shortcuts: Shortcuts::new(),
             background: BEIGE,
             nametable,
@@ -497,4 +499,10 @@ where
     {
         callback();
     }
+}
+
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub enum View {
+    FileViewer,
+    RomExplorer,
 }

@@ -30,10 +30,10 @@ fn main() {
     mq::Window::from_config(
         Conf {
             sample_count: 4, // msaa
-            window_title: "egui with macroquad".to_string(),
+            window_title: "PPU Tool".to_string(),
             high_dpi: true,
             window_width: (TEXTURE_DISPLAY_W + SIDE_PANEL_WIDTH) as i32,
-            window_height: TEXTURE_DISPLAY_H as i32,
+            window_height: (TEXTURE_DISPLAY_H + MENU_HEIGHT) as i32,
             ..Default::default()
         },
         run(),
@@ -58,10 +58,17 @@ async fn run() {
         }
 
         clear_background(Color::from(state.borrow().background));
-        view::main_art_view(&state);
         egui_mq::ui(|ctx| {
-            view::palette_change_color_window(&ctx, &state);
-            view::side_panel(&ctx, &state);
+            view::menu(&ctx, &state);
+            let view = state.borrow().view;
+            match view {
+                state::View::FileViewer => {
+                    view::main_art_view(&state);
+                    view::palette_change_color_window(&ctx, &state);
+                    view::side_panel(&ctx, &state);
+                }
+                state::View::RomExplorer => {}
+            }
         });
 
         egui_mq::draw();

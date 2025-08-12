@@ -12,3 +12,4 @@ pub const SIDE_PANEL_WIDTH: f32 =
 pub const PALETTE_SWATCH_SIZE: f32 = 22.0;
 // This is the distance the attributes are offset in the nametable data.
 pub const ATTRIBUTES_OFFSET: usize = 0x3c0;
+pub const MENU_HEIGHT: f32 = 24.0;

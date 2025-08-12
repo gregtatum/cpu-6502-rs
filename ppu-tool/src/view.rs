@@ -1,4 +1,4 @@
-use crate::state::State;
+use crate::state::{State, View};
 use crate::{constants::*, state::PaletteChange};
 use egui::epaint::Hsva;
 use std::cell::RefCell;
@@ -201,4 +201,18 @@ fn add_color_button(state: &RefCell<State>, ui: &mut egui::Ui, ntsc_index: u8) {
         state.borrow_mut().palette_change.is_open = false;
         state.borrow_mut().build_view_texture();
     }
+}
+
+pub fn menu(ctx: &egui::Context, state: &RefCell<State>) {
+    egui::TopBottomPanel::top("top menu").show(ctx, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let mut view = state.borrow().view;
+            // ui.visuals_mut().button_frame = false;
+            let r1 = ui.selectable_value(&mut view, View::FileViewer, "File Viewer");
+            let r2 = ui.selectable_value(&mut view, View::RomExplorer, "Rom Explorer");
+            if r1.clicked() || r2.clicked() {
+                state.borrow_mut().view = view;
+            }
+        });
+    });
 }
