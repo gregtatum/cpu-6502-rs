@@ -484,7 +484,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     visualizer.run()
 }
 
-fn add_register_span(name: &str, value: u8) -> Spans {
+fn add_register_span(name: &str, value: u8) -> Spans<'_> {
     let mut parts = vec![];
     if name.len() == 1 {
         parts.push(Span::styled("·", Style::default().fg(Color::Black)));
@@ -542,7 +542,7 @@ fn add_tick_count(count: u64) -> Spans<'static> {
     Spans::from(parts)
 }
 
-fn add_status_register_info(info: &str) -> Spans {
+fn add_status_register_info(info: &str) -> Spans<'_> {
     let mut parts = vec![];
     parts.push(Span::styled(
         "·          ",
@@ -812,7 +812,7 @@ fn get_ram_page_text(
     spans
 }
 
-fn create_block(title: &str) -> Block {
+fn create_block(title: &str) -> Block<'_> {
     Block::default()
         .borders(Borders::ALL)
         .style(Style::default().bg(Color::Black).fg(BORDER_COLOR))

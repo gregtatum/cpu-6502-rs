@@ -238,7 +238,7 @@ pub struct AsmLexer<'a> {
 }
 
 impl<'a> AsmLexer<'a> {
-    pub fn new(text: &'a str) -> AsmLexer {
+    pub fn new(text: &'a str) -> AsmLexer<'a> {
         AsmLexer {
             text,
             characters: IntoIterator::into_iter("".chars()).peekable(),
