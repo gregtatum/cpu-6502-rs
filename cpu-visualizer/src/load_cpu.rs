@@ -9,7 +9,15 @@ use cpu_6502::{
 };
 
 pub fn load_cpu<P: AsRef<Path>>(filename: P) -> (Cpu6502, AddressToLabel) {
-    let contents = std::fs::read_to_string(filename).unwrap();
+    let path = filename.as_ref();
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(err) => {
+            eprintln!("Unable to read '{}': {}", path.display(), err);
+            eprintln!("Make sure the path is correct and points to a readable .asm file.");
+            std::process::exit(1);
+        }
+    };
     let mut lexer = AsmLexer::new(&contents);
 
     match lexer.parse() {
