@@ -6,6 +6,8 @@ This is a 6502 emulator, debugger, and visualizer built in Rust. It features an 
 
 ## How to run
 
+> The WIP PPU code requires SLD2 to be installed. On macOS `brew install sdl2`. You may need to adjust `.cargo/config.toml`.
+
 The CPU debugger and visualizer can visualize the CPU running, and let you step through the code.
 
 See all of the [asm examples](src/bin/cpu-visualizer/asm).
@@ -31,7 +33,7 @@ src/bin/cpu-visualizer/asm
 Run the `cpu-visualizer` binary with a path to the `.asm` file.
 
 ```
-cargo run -p cpu-visualizer -- crates/cpu-visualizer/asm/fill-zero-page.asm
+cargo run -p cpu-visualizer -- cpu-visualizer/src/asm/fill-zero-page.asm
 ```
 
 The shortcuts for the program can be viewed by hitting `?` while using the program.
