@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -207,6 +208,84 @@ def command_fetch(args: argparse.Namespace) -> None:
         print(parsed.get("text", {}).get("*", ""))
 
 
+def title_to_slug(title: str) -> str:
+    """Convert a wiki title into a filesystem-friendly slug."""
+    return title.replace(" ", "_")
+
+
+def default_output_dir() -> Path:
+    return REPO_ROOT / "assets" / "nesdev"
+
+
+def format_metadata_wikitext(metadata: Dict[str, object]) -> str:
+    """Render metadata as a Page metadata template block."""
+    lines = ["{{Page metadata"]
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        lines.append(f" | {key} = {value}")
+    lines.append("}}")
+    return "\n".join(lines)
+
+
+def fetch_wikitext(title: str, refresh: bool) -> Tuple[Dict, str]:
+    params = {
+        "action": "parse",
+        "format": "json",
+        "page": title,
+        "prop": "wikitext",
+    }
+    data = cached_request(params, refresh=refresh)
+    parsed = data.get("parse")
+    if not parsed:
+        raise WikiError("No parse data returned; ensure the title exists.")
+
+    wikitext = parsed.get("wikitext", {}).get("*")
+    if wikitext is None:
+        raise WikiError("Page did not include wikitext content.")
+    return parsed, wikitext
+
+
+def resolve_repo_path(path_str: str | None, default: Path) -> Path:
+    if not path_str:
+        return default
+    candidate = Path(path_str)
+    if candidate.is_absolute():
+        return candidate
+    return REPO_ROOT / candidate
+
+
+def command_save(args: argparse.Namespace) -> None:
+    parsed, wikitext = fetch_wikitext(args.title, refresh=args.refresh)
+    slug = title_to_slug(args.slug if args.slug else parsed.get("title", args.title))
+
+    output_dir = resolve_repo_path(args.output_dir, default_output_dir())
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.output_path:
+        output_path = resolve_repo_path(args.output_path, output_dir / f"{slug}.wikitext")
+    else:
+        output_path = output_dir / f"{slug}.wikitext"
+
+    metadata = {
+        "title": parsed.get("title"),
+        "author": args.author,
+        "date": args.date or datetime.now(timezone.utc).date().isoformat(),
+        "source": f"https://www.nesdev.org/wiki/{title_to_slug(parsed.get('title', args.title))}",
+        "pageid": parsed.get("pageid"),
+        "revid": parsed.get("revid"),
+    }
+
+    front_matter = format_metadata_wikitext(metadata)
+    content = wikitext.rstrip("\n")
+    document = f"{front_matter}\n\n{content}\n"
+
+    with output_path.open("w", encoding="utf-8") as outfile:
+        outfile.write(document)
+
+    print(f"Wrote {output_path}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="NESDev MediaWiki helper utility.")
     parser.add_argument(
@@ -263,6 +342,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Which representation of the page to output (default: html).",
     )
     fetch_parser.set_defaults(func=command_fetch)
+
+    save_parser = subparsers.add_parser(
+        "save", help="Download wiki wikitext and store it in a Markdown file."
+    )
+    save_parser.add_argument("title", help="Exact wiki page title to fetch.")
+    save_parser.add_argument(
+        "--output-dir",
+        help="Directory for the generated wikitext file (default: assets/nesdev).",
+        default=str(default_output_dir()),
+    )
+    save_parser.add_argument(
+        "--output-path",
+        help="Explicit file path for the wikitext file (overrides --output-dir).",
+    )
+    save_parser.add_argument(
+        "--slug",
+        help="Override the filename slug (defaults to the wiki title).",
+    )
+    save_parser.add_argument(
+        "--author",
+        default="NESDev contributors",
+        help='Author field for the metadata template (default: "NESDev contributors").',
+    )
+    save_parser.add_argument(
+        "--date",
+        help="Override the metadata date (default: current UTC date).",
+    )
+    save_parser.set_defaults(func=command_save)
 
     parser.set_defaults(func=command_list)
     return parser
