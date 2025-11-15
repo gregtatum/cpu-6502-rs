@@ -1,0 +1,15 @@
+[project]
+name = "nesdev-tools"
+version = "0.1.0"
+description = "Utilities for interacting with the NESDev wiki"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+nesdev-pages = "nesdev_pages:main"
+
+[tool.uv]
+package = false
