@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nesdev-pages = "nesdev_pages:main"
+nesdev = "nesdev:main"
 
 [tool.uv]
 package = false
