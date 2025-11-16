@@ -5,7 +5,7 @@ authors = ["Greg Tatum <tatum.creative@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-cpu-6502 = { path = "../cpu-6502" }
+nes-core = { path = "../nes-core" }
 colored = { workspace = true }
 rand = { workspace = true }
 sdl2 = { workspace = true }

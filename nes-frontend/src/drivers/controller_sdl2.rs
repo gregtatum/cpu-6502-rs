@@ -1,6 +1,6 @@
-use cpu_6502::bus::Bus;
-use cpu_6502::controller::Controller;
-use cpu_6502::emulator::Emulator;
+use nes_core::bus::Bus;
+use nes_core::controller::Controller;
+use nes_core::nes_core::NesCore;
 use sdl2::controller::{Button, GameController};
 use sdl2::event::Event;
 use sdl2::{GameControllerSubsystem, JoystickSubsystem, Sdl};
@@ -60,7 +60,7 @@ impl ControllerManager {
     /// Handles any event related to controllers from the SDL global event pump.
     /// It maps these events to the NES controllers, and handles any controllers
     /// being connected or disconnected.
-    pub fn handle_event(&mut self, event: &Event, emulator: &Emulator) {
+    pub fn handle_event(&mut self, event: &Event, emulator: &NesCore) {
         match event {
             Event::ControllerButtonDown { button, which, .. } => {
                 let index = JoystickIndex(*which);
@@ -100,9 +100,9 @@ impl ControllerManager {
     }
 
     /// Once a controller is removed, stop tracking it. If it's being used as
-    /// either player 1 or 2, the controller is removed and the Emulator controller
+    /// either player 1 or 2, the controller is removed and the NesCore controller
     /// is "unplugged", setting it back to nothing pressed.
-    fn remove_controller(&mut self, index: JoystickIndex, emulator: &Emulator) {
+    fn remove_controller(&mut self, index: JoystickIndex, emulator: &NesCore) {
         self.active_controllers.remove(&index);
 
         if let Some(controller_1) = self.controller_1 {
@@ -145,7 +145,7 @@ impl ControllerManager {
         &mut self,
         button: &Button,
         index: JoystickIndex,
-        emulator: &Emulator,
+        emulator: &NesCore,
         value: bool,
     ) {
         let bus = emulator.bus.borrow();

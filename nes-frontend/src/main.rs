@@ -1,20 +1,21 @@
 pub mod drivers;
 
 use crate::drivers::controller_sdl2::ControllerManager;
-use cpu_6502::{emulator::Emulator, mappers::SimpleProgram};
+use nes_core::{mappers::SimpleProgram, nes_core::NesCore};
 
-struct System {
+/// The front-end for the NES core, powered by SLD2.
+struct NesFrontend {
     event_pump: sdl2::EventPump,
     controller_manager: ControllerManager,
-    emulator: Emulator,
+    nes_core: NesCore,
 }
 
-impl System {
+impl NesFrontend {
     pub fn new() -> Result<Self, String> {
         let sdl = sdl2::init()?;
         Ok(Self {
             event_pump: sdl.event_pump()?,
-            emulator: Emulator::new({
+            nes_core: NesCore::new({
                 let bytes: [u8; 256] = [0; 256];
                 Box::new(SimpleProgram::load(&bytes))
             }),
@@ -26,13 +27,13 @@ impl System {
         // Maps all of the SDL events to their respective components. There is a single global
         // event pump.
         for event in self.event_pump.poll_iter() {
-            self.controller_manager.handle_event(&event, &self.emulator);
+            self.controller_manager.handle_event(&event, &self.nes_core);
         }
     }
 }
 
 fn main() {
-    match System::new() {
+    match NesFrontend::new() {
         Ok(mut system) => {
             system.step();
         }

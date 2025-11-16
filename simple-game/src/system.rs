@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use cpu_6502::cpu_6502::Cpu6502;
+use nes_core::cpu_6502::Cpu6502;
 use sdl2::{
     event::Event,
     keyboard::Keycode,

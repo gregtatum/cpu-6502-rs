@@ -10,7 +10,7 @@ tui = { workspace = true }
 termion = { workspace = true }
 sdl2 = { workspace = true }
 rand = { workspace = true }
-cpu-6502 = { path = "../cpu-6502" }
+nes-core = { path = "../nes-core" }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }

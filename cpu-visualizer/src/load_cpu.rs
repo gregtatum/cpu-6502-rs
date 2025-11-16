@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use cpu_6502::{
+use nes_core::{
     asm::{AddressToLabel, AsmLexer, BytesLabels},
     bus::Bus,
     cpu_6502::Cpu6502,
@@ -14,7 +14,9 @@ pub fn load_cpu<P: AsRef<Path>>(filename: P) -> (Cpu6502, AddressToLabel) {
         Ok(contents) => contents,
         Err(err) => {
             eprintln!("Unable to read '{}': {}", path.display(), err);
-            eprintln!("Make sure the path is correct and points to a readable .asm file.");
+            eprintln!(
+                "Make sure the path is correct and points to a readable .asm file."
+            );
             std::process::exit(1);
         }
     };

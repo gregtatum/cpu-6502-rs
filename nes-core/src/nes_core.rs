@@ -6,15 +6,17 @@ use crate::{
     mappers::Mapper,
 };
 
-pub struct Emulator {
+/// The core logic for the NES. It requires a front-end to actually produce
+/// video, sound, and take gamepad input.
+pub struct NesCore {
     pub bus: SharedBus,
     pub cpu: Cpu6502,
 }
 
-impl Emulator {
-    pub fn new(cartridge: Box<dyn Mapper>) -> Emulator {
+impl NesCore {
+    pub fn new(cartridge: Box<dyn Mapper>) -> NesCore {
         let bus = Bus::new_shared_bus(cartridge);
-        Emulator {
+        NesCore {
             cpu: Cpu6502::new(Rc::clone(&bus)),
             // Take ownership of the initial bus.
             bus,
@@ -35,7 +37,7 @@ impl Emulator {
 }
 
 pub trait ControllerDriver {
-    fn step(&mut self, emulator: &Emulator);
+    fn step(&mut self, emulator: &NesCore);
 }
 
 #[cfg(test)]
@@ -46,7 +48,7 @@ mod test {
 
     use super::*;
 
-    pub fn create_emulator(text: &str) -> Emulator {
+    pub fn create_emulator(text: &str) -> NesCore {
         let mut lexer = AsmLexer::new(text);
 
         match lexer.parse() {
@@ -54,7 +56,7 @@ mod test {
                 let BytesLabels { mut bytes, .. } = lexer.into_bytes().unwrap();
                 bytes.push(OpCode::KIL as u8);
                 let cartridge = Box::new(SimpleProgram::load(&bytes));
-                Emulator::new(cartridge)
+                NesCore::new(cartridge)
             }
             Err(parse_error) => {
                 parse_error.panic_nicely();
@@ -66,7 +68,7 @@ mod test {
     #[test]
     fn test_emulator() {
         let cartridge = Box::new(SimpleProgram::new());
-        let mut emulator = Emulator::new(cartridge);
+        let mut emulator = NesCore::new(cartridge);
         emulator.step();
     }
 

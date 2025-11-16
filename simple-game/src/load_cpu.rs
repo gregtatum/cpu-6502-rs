@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use cpu_6502::{
+use nes_core::{
     asm::{AddressToLabel, AsmLexer, BytesLabels},
     bus::Bus,
     cpu_6502::Cpu6502,

@@ -294,19 +294,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "cpu-6502"
-version = "0.1.0"
-dependencies = [
- "colored",
-]
-
-[[package]]
 name = "cpu-visualizer"
 version = "0.1.0"
 dependencies = [
  "colored",
- "cpu-6502",
  "insta",
+ "nes-core",
  "rand",
  "sdl2",
  "termion",
@@ -458,14 +451,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5277249c8c3430e7127e4f2c40a77485e7baf11ae132ce9b3253a8ed710df0a0"
 dependencies = [
  "bytemuck",
-]
-
-[[package]]
-name = "emulator"
-version = "0.1.0"
-dependencies = [
- "cpu-6502",
- "sdl2",
 ]
 
 [[package]]
@@ -822,6 +807,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1bcdd74c20ad5d95aacd60ef9ba40fdf77f767051040541df557b7a9b2a2121"
 
 [[package]]
+name = "nes-core"
+version = "0.1.0"
+dependencies = [
+ "colored",
+]
+
+[[package]]
+name = "nes-frontend"
+version = "0.1.0"
+dependencies = [
+ "nes-core",
+ "sdl2",
+]
+
+[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1024,13 +1024,13 @@ dependencies = [
 name = "ppu-tool"
 version = "0.1.0"
 dependencies = [
- "cpu-6502",
  "dispatch",
  "egui",
  "egui-miniquad",
  "macroquad",
  "miniquad",
  "native-dialog",
+ "nes-core",
  "structopt",
 ]
 
@@ -1285,7 +1285,7 @@ name = "simple-game"
 version = "0.1.0"
 dependencies = [
  "colored",
- "cpu-6502",
+ "nes-core",
  "rand",
  "sdl2",
 ]

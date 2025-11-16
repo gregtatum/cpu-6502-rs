@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2" # 2021 edition
 members = [
-    "cpu-6502",
     "cpu-visualizer",
-    "emulator",
+    "nes-core",
+    "nes-frontend",
     "ppu-cli-tool",
     "ppu-tool",
     "simple-game",

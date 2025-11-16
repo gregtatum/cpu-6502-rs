@@ -1,8 +1,9 @@
 [package]
-name = "cpu-6502"
+name = "nes-frontend"
 version = "0.1.0"
 authors = ["Greg Tatum <tatum.creative@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-colored = { workspace = true }
+nes-core = { path = "../nes-core" }
+sdl2 = { workspace = true }

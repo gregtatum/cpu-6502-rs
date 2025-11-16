@@ -1,4 +1,4 @@
-pub use cpu_6502::ppu::NTSC_PALETTE;
+pub use nes_core::ppu::NTSC_PALETTE;
 pub const NAMETABLE_W: usize = 32;
 pub const NAMETABLE_H: usize = 30;
 

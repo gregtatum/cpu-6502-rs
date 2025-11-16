@@ -3,7 +3,7 @@ mod load_cpu;
 mod util;
 
 use crate::util::event::{Event, Events};
-use cpu_6502::{
+use nes_core::{
     asm::AddressToLabel,
     cpu_6502::Cpu6502,
     log::{init_log, log},
