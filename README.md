@@ -1,6 +1,6 @@
-# 6502 Emulator in Rust
+# (WIP) NES Emulator in Rust
 
-This is a 6502 emulator, debugger, and visualizer built in Rust. It features an ASM compiler, which takes in an .asm file, and can either output the binary machine code, or load it directly in memory and run it. This project started as an NES emulator, but I decided I was having more fun just building the CPU emulator, and stopped there. I spent more time on compiler and debugger, as I found that interesting.
+This is a side project to build an NES emulator. It's mostly me learning some low level fundamentals and having fun building some tooling with a debugger, and visualizer. I've built an ASM compiler, which takes in an .asm file, and can either output the binary machine code, or load it directly in memory and run it. The PPU isn't built yet, nor the sound, so the emulator doesn't really do anything yet.
 
 ![screenshot of debugger](screenshot.png)
 
