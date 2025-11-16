@@ -1,5 +1,5 @@
 use crate::constants::{memory_range, InterruptVectors};
-use crate::opcodes::{Mode, OpCode, OPCODE_STRING_TABLE};
+use crate::opcodes::{Mode, OpCode};
 use crate::{bus::SharedBus, opcodes};
 pub mod opcodes_illegal;
 pub mod opcodes_jump;

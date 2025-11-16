@@ -1,0 +1,9 @@
+[package]
+name = "emulator"
+version = "0.1.0"
+authors = ["Greg Tatum <tatum.creative@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cpu-6502 = { path = "../cpu-6502" }
+sdl2 = { workspace = true }

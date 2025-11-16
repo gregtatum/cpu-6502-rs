@@ -3,6 +3,7 @@ resolver = "2" # 2021 edition
 members = [
     "cpu-6502",
     "cpu-visualizer",
+    "emulator",
     "ppu-cli-tool",
     "ppu-tool",
     "simple-game",

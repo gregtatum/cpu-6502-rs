@@ -34,6 +34,10 @@ impl Emulator {
     }
 }
 
+pub trait ControllerDriver {
+    fn step(&mut self, emulator: &Emulator);
+}
+
 #[cfg(test)]
 mod test {
     use crate::asm::{AsmLexer, BytesLabels};

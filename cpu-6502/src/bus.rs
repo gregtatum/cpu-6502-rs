@@ -24,8 +24,10 @@ pub struct Bus {
     // $0000 |-------------------------|-------------------------| $0000
     ram: [u8; memory_range::RAM.end as usize],
     cartridge: Box<dyn Mapper>,
-    pub controller_1: Option<RefCell<Controller>>,
-    pub controller_2: Option<RefCell<Controller>>,
+    // These controllers are always here. It's up to the system to "plug" devices
+    // in by updating the values.
+    pub controller_1: RefCell<Controller>,
+    pub controller_2: RefCell<Controller>,
 }
 
 impl Bus {
@@ -34,8 +36,8 @@ impl Bus {
             // Little endian memory store, 2 kilobytes in size.
             ram: [0; memory_range::RAM.end as usize],
             cartridge,
-            controller_1: Some(RefCell::new(Controller::new())),
-            controller_2: Some(RefCell::new(Controller::new())),
+            controller_1: RefCell::new(Controller::new()),
+            controller_2: RefCell::new(Controller::new()),
         }))
     }
 
@@ -63,20 +65,8 @@ impl Bus {
             // to restart.
             //
             // See https://www.nesdev.org/wiki/Controller_reading
-            0x4016 => {
-                return self
-                    .controller_1
-                    .as_ref()
-                    .map(|controller| controller.borrow_mut().read_bit())
-                    .unwrap_or(0);
-            }
-            0x4017 => {
-                return self
-                    .controller_2
-                    .as_ref()
-                    .map(|controller| controller.borrow_mut().read_bit())
-                    .unwrap_or(0);
-            }
+            0x4016 => return self.controller_1.borrow_mut().read_bit(),
+            0x4017 => return self.controller_2.borrow_mut().read_bit(),
             _ => {}
         }
 
@@ -118,21 +108,11 @@ impl Bus {
             //       ||+- Controller port latch bit
             //       ++-- Expansion port latch bits (not implemented here)
             if value & 0b0000_0001 == 0 {
-                if let Some(controller) = &self.controller_1 {
-                    controller.borrow_mut().close_latch();
-                }
-
-                if let Some(controller) = &self.controller_2 {
-                    controller.borrow_mut().close_latch();
-                }
+                self.controller_1.borrow_mut().close_latch();
+                self.controller_2.borrow_mut().close_latch();
             } else {
-                if let Some(controller) = &self.controller_1 {
-                    controller.borrow_mut().open_latch();
-                }
-
-                if let Some(controller) = &self.controller_2 {
-                    controller.borrow_mut().open_latch();
-                }
+                self.controller_1.borrow_mut().open_latch();
+                self.controller_2.borrow_mut().open_latch();
             }
             return;
         }

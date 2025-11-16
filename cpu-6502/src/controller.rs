@@ -101,6 +101,23 @@ impl Controller {
         self.read_state = (self.read_state >> 1) | 0b1000_0000;
         bit
     }
+
+    /// Simulates unplugging a controller. From here on out the bits will just be 0 if
+    /// the controller is read.
+    ///
+    /// TODO - For more accurate behavior you can simulate open bus reads:
+    ///   https://www.nesdev.org/wiki/Controller_reading
+    ///   https://www.nesdev.org/wiki/Open_bus_behavior
+    pub fn unplug(&mut self) {
+        self.a = false;
+        self.b = false;
+        self.select = false;
+        self.start = false;
+        self.up = false;
+        self.down = false;
+        self.left = false;
+        self.right = false;
+    }
 }
 
 #[cfg(test)]
