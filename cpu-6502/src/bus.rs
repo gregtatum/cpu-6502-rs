@@ -1,4 +1,5 @@
 use super::constants::memory_range;
+use crate::controller::Controller;
 use crate::mappers::Mapper;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,6 +24,8 @@ pub struct Bus {
     // $0000 |-------------------------|-------------------------| $0000
     ram: [u8; memory_range::RAM.end as usize],
     cartridge: Box<dyn Mapper>,
+    controller_1: Option<Controller>,
+    controller_2: Option<Controller>,
 }
 
 impl Bus {
@@ -31,6 +34,8 @@ impl Bus {
             // Little endian memory store, 2 kilobytes in size.
             ram: [0; memory_range::RAM.end as usize],
             cartridge,
+            controller_1: Some(Controller::new()),
+            controller_2: Some(Controller::new()),
         }))
     }
 
