@@ -24,8 +24,8 @@ pub struct Bus {
     // $0000 |-------------------------|-------------------------| $0000
     ram: [u8; memory_range::RAM.end as usize],
     cartridge: Box<dyn Mapper>,
-    controller_1: Option<Controller>,
-    controller_2: Option<Controller>,
+    controller_1: Option<RefCell<Controller>>,
+    controller_2: Option<RefCell<Controller>>,
 }
 
 impl Bus {
@@ -34,8 +34,8 @@ impl Bus {
             // Little endian memory store, 2 kilobytes in size.
             ram: [0; memory_range::RAM.end as usize],
             cartridge,
-            controller_1: Some(Controller::new()),
-            controller_2: Some(Controller::new()),
+            controller_1: Some(RefCell::new(Controller::new())),
+            controller_2: Some(RefCell::new(Controller::new())),
         }))
     }
 
@@ -54,6 +54,32 @@ impl Bus {
     }
 
     pub fn read_u8(&self, address: u16) -> u8 {
+        match address {
+            // When reading from 0x4016 or 0x4017 the controller's button states
+            // are read out from A → B → Select → Start → Up → Down → Left → Right and
+            // finally the value 1 is repeated.
+            //
+            // To reset the read, then set the value at 0x4016 to trigger the controllers
+            // to restart.
+            //
+            // See https://www.nesdev.org/wiki/Controller_reading
+            0x4016 => {
+                return self
+                    .controller_1
+                    .as_ref()
+                    .map(|controller| controller.borrow_mut().read_bit())
+                    .unwrap_or(0);
+            }
+            0x4017 => {
+                return self
+                    .controller_2
+                    .as_ref()
+                    .map(|controller| controller.borrow_mut().read_bit())
+                    .unwrap_or(0);
+            }
+            _ => {}
+        }
+
         if let Some(value) = self.cartridge.read_cpu(address) {
             return value;
         }
@@ -81,6 +107,36 @@ impl Bus {
     }
 
     pub fn set_u8(&mut self, address: u16, value: u8) {
+        if address == 0x4016 {
+            // Writing bit 0 high latches controller state for serial reads
+            // (see https://www.nesdev.org/wiki/Controller_reading).
+            //
+            // 7  bit  0
+            // ---- ----
+            // xxxx xEES
+            //       |||
+            //       ||+- Controller port latch bit
+            //       ++-- Expansion port latch bits (not implemented here)
+            if value & 0b0000_0001 == 0 {
+                if let Some(controller) = &self.controller_1 {
+                    controller.borrow_mut().close_latch();
+                }
+
+                if let Some(controller) = &self.controller_2 {
+                    controller.borrow_mut().close_latch();
+                }
+            } else {
+                if let Some(controller) = &self.controller_1 {
+                    controller.borrow_mut().open_latch();
+                }
+
+                if let Some(controller) = &self.controller_2 {
+                    controller.borrow_mut().open_latch();
+                }
+            }
+            return;
+        }
+
         self.ram[self.map_ram_address(address) as usize] = value;
     }
 

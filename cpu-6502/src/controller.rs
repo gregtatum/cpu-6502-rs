@@ -1,16 +1,5 @@
 use std::ops::BitOr;
 
-pub struct Controller {
-    // Where the controller state is stored, packed into a u8.
-    // 0000_0000
-    // RLDU +-BA
-    pub state: u8,
-
-    // As the controller is read this state gets updated, so it's internal
-    // only.
-    read_state: u8,
-}
-
 pub enum BUTTON {
     A = 0b0000_0001,
     B = 0b0000_0010,
@@ -47,11 +36,28 @@ impl BitOr<BUTTON> for u8 {
     }
 }
 
+pub struct Controller {
+    // Where the controller state is stored, packed into a u8.
+    // 0000_0000
+    // RLDU +-BA
+    pub state: u8,
+
+    // As the controller is read this state gets updated, so it's internal
+    // only.
+    read_state: u8,
+
+    // The latch is used by the Bus to signal a new controller read. The latch first
+    // goes up, which continuously reads the controller state. Once the latch goes
+    // down the controller can be read from one bit at a time.
+    is_latch_open: bool,
+}
+
 impl Controller {
     pub fn new() -> Controller {
         Controller {
             state: 0,
             read_state: 0,
+            is_latch_open: false,
         }
     }
 
@@ -70,14 +76,28 @@ impl Controller {
         }
     }
 
-    /// Copy over the controller bits to begin the read of
-    pub fn start_read(&mut self) {
+    /// When the 0b0000_0001 is written to $4016 or $4017 the latch is opened up
+    /// to the controller. It will continuously reset its state to read the A button.
+    pub fn open_latch(&mut self) {
+        self.is_latch_open = true;
+    }
+
+    /// When the latch is closed by writing 0b0000_0000 to $4016 or $4017 the controller
+    /// will begin reading out the current state one bit at a time.
+    pub fn close_latch(&mut self) {
+        self.is_latch_open = false;
+        // When closing the latch, the next read should be the current controller state.
         self.read_state = self.state;
     }
 
     /// Reads a bit from the controller's state. After all of the bits have been read
-    /// the controller only feeds bit value 1 through.
+    /// the controller only feeds bit value 1 through. If the latch is open, then
+    /// it will just return the cu
     pub fn read_bit(&mut self) -> u8 {
+        if self.is_latch_open {
+            // When the latch is open, only the current controller state is returned.
+            self.read_state = self.state;
+        }
         let bit = self.read_state & 0b000_0001;
         self.read_state = (self.read_state >> 1) | 0b1000_0000;
         bit
@@ -120,6 +140,7 @@ impl From<u8> for Controller {
         Controller {
             state: value,
             read_state: 0,
+            is_latch_open: false,
         }
     }
 }
@@ -129,6 +150,9 @@ mod test {
     use super::*;
 
     const CONTROLLER_READ: &str = "
+        JOYPAD1 = $4016
+        JOYPAD2 = $4017
+
         ; At the same time that we strobe bit 0, we initialize the ring counter
         ; so we're hitting two birds with one stone here
         readjoy:
@@ -170,7 +194,8 @@ mod test {
         // Do this test twice to ensure it can be read from again.
         for _ in 0..2 {
             // All of the reads should match.
-            controller.start_read();
+            controller.open_latch();
+            controller.close_latch();
             for button in vec![
                 BUTTON::A,
                 BUTTON::B,
