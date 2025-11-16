@@ -24,8 +24,8 @@ pub struct Bus {
     // $0000 |-------------------------|-------------------------| $0000
     ram: [u8; memory_range::RAM.end as usize],
     cartridge: Box<dyn Mapper>,
-    controller_1: Option<RefCell<Controller>>,
-    controller_2: Option<RefCell<Controller>>,
+    pub controller_1: Option<RefCell<Controller>>,
+    pub controller_2: Option<RefCell<Controller>>,
 }
 
 impl Bus {

@@ -76,12 +76,14 @@ impl Controller {
     /// When the 0b0000_0001 is written to $4016 or $4017 the latch is opened up
     /// to the controller. It will continuously reset its state to read the A button.
     pub fn open_latch(&mut self) {
+        eprintln!("open latch");
         self.is_latch_open = true;
     }
 
     /// When the latch is closed by writing 0b0000_0000 to $4016 or $4017 the controller
     /// will begin reading out the current state one bit at a time.
     pub fn close_latch(&mut self) {
+        eprintln!("close latch");
         self.is_latch_open = false;
         // When closing the latch, the next read should be the current controller state.
         self.read_state = self.encode_state();
@@ -101,51 +103,9 @@ impl Controller {
     }
 }
 
-impl From<u8> for Controller {
-    fn from(value: u8) -> Self {
-        Controller {
-            a: value & BUTTON::A as u8 != 0,
-            b: value & BUTTON::B as u8 != 0,
-            select: value & BUTTON::Select as u8 != 0,
-            start: value & BUTTON::Start as u8 != 0,
-            up: value & BUTTON::Up as u8 != 0,
-            down: value & BUTTON::Down as u8 != 0,
-            left: value & BUTTON::Left as u8 != 0,
-            right: value & BUTTON::Right as u8 != 0,
-            read_state: 0,
-            is_latch_open: false,
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
-
-    const CONTROLLER_READ: &str = "
-        JOYPAD1 = $4016
-        JOYPAD2 = $4017
-
-        ; At the same time that we strobe bit 0, we initialize the ring counter
-        ; so we're hitting two birds with one stone here
-        readjoy:
-            lda #$01
-            ; While the strobe bit is set, buttons will be continuously reloaded.
-            ; This means that reading from JOYPAD1 will only return the state of the
-            ; first button: button A.
-            sta JOYPAD1
-            sta buttons
-            lsr a        ; now A is 0
-            ; By storing 0 into JOYPAD1, the strobe bit is cleared and the reloading stops.
-            ; This allows all 8 buttons (newly reloaded) to be read from JOYPAD1.
-            sta JOYPAD1
-        loop:
-            lda JOYPAD1
-            lsr a        ; bit 0 -> Carry
-            rol buttons  ; Carry -> bit 0; bit 7 -> Carry
-            bcc loop
-            rts
-    ";
 
     #[test]
     fn test_controller_struct() {

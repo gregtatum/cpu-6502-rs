@@ -1,5 +1,5 @@
 use crate::constants::{memory_range, InterruptVectors};
-use crate::opcodes::{Mode, OpCode};
+use crate::opcodes::{Mode, OpCode, OPCODE_STRING_TABLE};
 use crate::{bus::SharedBus, opcodes};
 pub mod opcodes_illegal;
 pub mod opcodes_jump;
@@ -90,6 +90,9 @@ pub struct Cpu6502 {
     pub cycles: u8,
 
     pub tick_count: u64,
+
+    // Stop running the CPU after so many ticks. Useful for testing.
+    pub max_ticks: Option<u64>,
 }
 
 impl Cpu6502 {
@@ -113,6 +116,7 @@ impl Cpu6502 {
             p: 0b0011_0100,
             cycles: 0,
             tick_count: 0,
+            max_ticks: None,
         }
     }
 
@@ -148,10 +152,17 @@ impl Cpu6502 {
         }
     }
 
-    /// Run the emulator until the "KIL" command is issued.
+    /// Run the emulator until the "KIL" or "BRK" command is issued.
     pub fn run(&mut self) {
-        while self.peek_u8() != OpCode::KIL as u8 {
+        while self.peek_u8() != OpCode::KIL as u8 && self.peek_u8() != OpCode::BRK as u8 {
             self.tick();
+
+            // If there is a max ticks counter, respect it.
+            if let Some(max_ticks) = self.max_ticks {
+                if self.tick_count > max_ticks {
+                    break;
+                }
+            }
         }
     }
 

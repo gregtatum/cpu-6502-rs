@@ -68,8 +68,45 @@ mod test {
 
     #[test]
     fn test_controllers() {
-        let mut emulator = create_emulator("");
+        let mut emulator = create_emulator("
+            ; At the same time that we strobe bit 0, we initialize the ring counter
+            ; so we're hitting two birds with one stone here
+            read_joypad:
+                lda #$01
+                ; While the strobe bit is set, buttons will be continuously reloaded.
+                ; This means that reading from JOYPAD1 will only return the state of the
+                ; first button: button A.
+                sta $4016    ; JOYPAD1
+                sta $33
+                lsr a        ; now A is 0
+                ; By storing 0 into JOYPAD1, the strobe bit is cleared and the reloading stops.
+                ; This allows all 8 buttons (newly reloaded) to be read from JOYPAD1.
+                sta $4016    ; JOYPAD1
+            loop:
+                lda $4016    ; JOYPAD1
+                lsr a        ; bit 0 -> Carry
+                rol $33      ; Carry -> bit 0; bit 7 -> Carry
+                bcc loop
+        ");
+        emulator.cpu.max_ticks = Some(100);
+
+        {
+            // Mutate the controller.
+            let bus = emulator.bus.borrow();
+            let mut controller = bus
+                .controller_1
+                .as_ref()
+                .expect("controller_1 should exist")
+                .borrow_mut();
+
+            controller.a = true;
+            controller.select = true;
+            controller.up = true;
+        }
+
         emulator.run();
-        assert_eq!(emulator.cpu.a, 0);
+
+        // The value for the controller read should be on the zero page at $33.
+        assert_eq!(emulator.bus.borrow().read_u8(0x33), 0b1010_1000);
     }
 }

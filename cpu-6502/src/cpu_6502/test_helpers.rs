@@ -2,7 +2,6 @@
 
 use crate::bus::Bus;
 use crate::cpu_6502::*;
-use crate::emulator::Emulator;
 use crate::{
     asm::{AsmLexer, BytesLabels},
     mappers::SimpleProgram,
