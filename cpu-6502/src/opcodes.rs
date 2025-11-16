@@ -697,6 +697,7 @@ pub fn instruction_mode_to_op_code(
     })
 }
 
+/// The numbers of cycles each opcode takes to run, needed for accurate timing.
 pub const CYCLES_TABLE: [u8; 256] = [
     7, 6, 0, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6, 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7,
     4, 4, 7, 7, 6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6, 2, 5, 0, 8, 4, 4, 6, 6,
@@ -710,7 +711,7 @@ pub const CYCLES_TABLE: [u8; 256] = [
     4, 4, 7, 7,
 ];
 
-// TODO
+// TODO - https://www.nesdev.org/wiki/Cycle_counting
 pub const EXTRA_CYCLES_TABLE: [u8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

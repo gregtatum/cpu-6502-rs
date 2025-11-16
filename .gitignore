@@ -1,5 +1,7 @@
 /target
 assets/private
+assets/nesdev
+assets/nesdev_cache
 error.log
 
 /log.txt
