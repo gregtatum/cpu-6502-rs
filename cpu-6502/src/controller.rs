@@ -1,5 +1,3 @@
-use std::ops::BitOr;
-
 pub enum BUTTON {
     A = 0b0000_0001,
     B = 0b0000_0010,
@@ -11,39 +9,17 @@ pub enum BUTTON {
     Right = 0b1000_0000,
 }
 
-/// Add BitOr support for ergonomic API usage.
-impl BitOr for BUTTON {
-    type Output = u8;
-
-    fn bitor(self, rhs: BUTTON) -> u8 {
-        (self as u8) | (rhs as u8)
-    }
-}
-
-impl BitOr<u8> for BUTTON {
-    type Output = u8;
-
-    fn bitor(self, rhs: u8) -> u8 {
-        (self as u8) | rhs
-    }
-}
-
-impl BitOr<BUTTON> for u8 {
-    type Output = u8;
-
-    fn bitor(self, rhs: BUTTON) -> u8 {
-        self | (rhs as u8)
-    }
-}
-
 pub struct Controller {
-    // Where the controller state is stored, packed into a u8.
-    // 0000_0000
-    // RLDU +-BA
-    pub state: u8,
+    pub a: bool,
+    pub b: bool,
+    pub select: bool,
+    pub start: bool,
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
 
-    // As the controller is read this state gets updated, so it's internal
-    // only.
+    // As the controller is read this state gets updated, so it's internal only.
     read_state: u8,
 
     // The latch is used by the Bus to signal a new controller read. The latch first
@@ -55,25 +31,46 @@ pub struct Controller {
 impl Controller {
     pub fn new() -> Controller {
         Controller {
-            state: 0,
+            a: false,
+            b: false,
+            select: false,
+            start: false,
+            up: false,
+            down: false,
+            left: false,
+            right: false,
             read_state: 0,
             is_latch_open: false,
         }
     }
 
-    pub fn get(&self, mask: BUTTON) -> bool {
-        self.state & (mask as u8) != 0
-    }
-
-    // Set an individual button.
-    pub fn set_button(&mut self, mask: u8, value: bool) {
-        if value {
-            // set bit(s)
-            self.state |= mask;
-        } else {
-            // clear bit(s)
-            self.state &= !mask;
+    fn encode_state(&self) -> u8 {
+        let mut value = 0;
+        if self.a {
+            value |= BUTTON::A as u8;
         }
+        if self.b {
+            value |= BUTTON::B as u8;
+        }
+        if self.select {
+            value |= BUTTON::Select as u8;
+        }
+        if self.start {
+            value |= BUTTON::Start as u8;
+        }
+        if self.up {
+            value |= BUTTON::Up as u8;
+        }
+        if self.down {
+            value |= BUTTON::Down as u8;
+        }
+        if self.left {
+            value |= BUTTON::Left as u8;
+        }
+        if self.right {
+            value |= BUTTON::Right as u8;
+        }
+        value
     }
 
     /// When the 0b0000_0001 is written to $4016 or $4017 the latch is opened up
@@ -87,7 +84,7 @@ impl Controller {
     pub fn close_latch(&mut self) {
         self.is_latch_open = false;
         // When closing the latch, the next read should be the current controller state.
-        self.read_state = self.state;
+        self.read_state = self.encode_state();
     }
 
     /// Reads a bit from the controller's state. After all of the bits have been read
@@ -96,49 +93,25 @@ impl Controller {
     pub fn read_bit(&mut self) -> u8 {
         if self.is_latch_open {
             // When the latch is open, only the current controller state is returned.
-            self.read_state = self.state;
+            self.read_state = self.encode_state();
         }
         let bit = self.read_state & 0b000_0001;
         self.read_state = (self.read_state >> 1) | 0b1000_0000;
         bit
-    }
-
-    /// Given a controller state, returns a text representation of it:
-    ///
-    /// e.g.
-    ///
-    ///    RLDU +-BA
-    ///    1010 0001
-    #[cfg(test)]
-    pub fn as_string(&self) -> String {
-        fn bit(c: char, pressed: bool) -> char {
-            if pressed {
-                c
-            } else {
-                '.'
-            }
-        }
-
-        let s = self.state;
-
-        let r = bit('R', s & BUTTON::Right as u8 != 0);
-        let l = bit('L', s & BUTTON::Left as u8 != 0);
-        let d = bit('D', s & BUTTON::Down as u8 != 0);
-        let u = bit('U', s & BUTTON::Up as u8 != 0);
-
-        let select = bit('-', s & BUTTON::Select as u8 != 0);
-        let start = bit('+', s & BUTTON::Start as u8 != 0);
-        let b = bit('B', s & BUTTON::B as u8 != 0);
-        let a = bit('A', s & BUTTON::A as u8 != 0);
-
-        format!("{}{}{}{} {}{}{}{}", r, l, d, u, start, select, b, a)
     }
 }
 
 impl From<u8> for Controller {
     fn from(value: u8) -> Self {
         Controller {
-            state: value,
+            a: value & BUTTON::A as u8 != 0,
+            b: value & BUTTON::B as u8 != 0,
+            select: value & BUTTON::Select as u8 != 0,
+            start: value & BUTTON::Start as u8 != 0,
+            up: value & BUTTON::Up as u8 != 0,
+            down: value & BUTTON::Down as u8 != 0,
+            left: value & BUTTON::Left as u8 != 0,
+            right: value & BUTTON::Right as u8 != 0,
             read_state: 0,
             is_latch_open: false,
         }
@@ -176,20 +149,13 @@ mod test {
 
     #[test]
     fn test_controller_struct() {
-        let mut controller = Controller::from(BUTTON::A | BUTTON::Select | BUTTON::Up);
-        assert_eq!(controller.as_string(), "...U .-.A");
+        let mut controller = Controller::new();
 
-        // Pressed:
-        assert!(controller.get(BUTTON::A));
-        assert!(controller.get(BUTTON::Select));
-        assert!(controller.get(BUTTON::Up));
+        controller.a = true;
+        controller.select = true;
+        controller.up = true;
 
-        // Not pressed:
-        assert!(!controller.get(BUTTON::B));
-        assert!(!controller.get(BUTTON::Start));
-        assert!(!controller.get(BUTTON::Down));
-        assert!(!controller.get(BUTTON::Left));
-        assert!(!controller.get(BUTTON::Right));
+        assert_eq!(controller.encode_state(), 0b0001_0101);
 
         // Do this test twice to ensure it can be read from again.
         for _ in 0..2 {
@@ -206,7 +172,17 @@ mod test {
                 BUTTON::Left,
                 BUTTON::Right,
             ] {
-                assert_eq!(controller.read_bit() == 1, controller.get(button));
+                let is_pressed = match button {
+                    BUTTON::A => controller.a,
+                    BUTTON::B => controller.b,
+                    BUTTON::Select => controller.select,
+                    BUTTON::Start => controller.start,
+                    BUTTON::Up => controller.up,
+                    BUTTON::Down => controller.down,
+                    BUTTON::Left => controller.left,
+                    BUTTON::Right => controller.right,
+                };
+                assert_eq!(controller.read_bit() == 1, is_pressed);
             }
 
             // And it should continue to read as 1 afterwards.
