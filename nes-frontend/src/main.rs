@@ -3,9 +3,17 @@ pub mod zero_page;
 
 use crate::drivers::controller_sdl2::ControllerManager;
 use crate::zero_page::ZeroPageWindow;
-use nes_core::{cpu_6502::ExitReason, mappers::SimpleProgram, nes_core::NesCore};
+use nes_core::{
+    asm::{AsmLexer, BytesLabels},
+    cpu_6502::ExitReason,
+    mappers::SimpleProgram,
+    nes_core::NesCore,
+    opcodes::OpCode,
+};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// The front-end for the NES core, powered by SLD2.
 struct NesFrontend {
@@ -19,10 +27,7 @@ impl NesFrontend {
     pub fn new() -> Result<Self, String> {
         let sdl = sdl2::init()?;
 
-        let nes_core = NesCore::new({
-            let bytes: [u8; 256] = [0; 256];
-            Box::new(SimpleProgram::load(&bytes))
-        });
+        let nes_core = create_demo_core();
 
         Ok(Self {
             nes_core,
@@ -37,21 +42,29 @@ impl NesFrontend {
     ///   1. Processing the events
     ///   2. Advancing the CPU by at most 1 frame.
     ///   3. Drawing that frame.
+    ///   4. Sleeping to keep an ~60Hz cadence.
     fn run(&mut self) -> Result<(), String> {
+        const TARGET_FRAME_TIME: Duration = Duration::from_nanos(16_666_667);
         loop {
+            let frame_start = Instant::now();
+
             if self.process_events()? {
-                // The program should escape.
                 break;
             }
 
             match self.nes_core.frame() {
-                ExitReason::KIL => break,
-                ExitReason::MaxTicks | ExitReason::BRK => {}
+                ExitReason::KIL | ExitReason::BRK => break,
+                ExitReason::MaxTicks => {}
             }
 
             if let Some(window) = self.zero_page_window.as_mut() {
                 let bus = self.nes_core.bus.borrow();
                 window.update(&bus)?;
+            }
+
+            let elapsed = frame_start.elapsed();
+            if elapsed < TARGET_FRAME_TIME {
+                thread::sleep(TARGET_FRAME_TIME - elapsed);
             }
         }
 
@@ -75,11 +88,39 @@ impl NesFrontend {
     }
 }
 
+fn create_demo_core() -> NesCore {
+    let mut lexer = AsmLexer::new(
+        "
+            ; Fill the zero page with incrementing values.
+            lda #$22
+            root:
+                sta $00,x
+                adc #1
+                inx
+                brk
+                jmp root
+        ",
+    );
+    match lexer.parse() {
+        Ok(()) => {
+            let BytesLabels { mut bytes, .. } = lexer.into_bytes().unwrap();
+            bytes.push(OpCode::KIL as u8);
+            NesCore::new(Box::new(SimpleProgram::load(&bytes)))
+        }
+        Err(error) => {
+            error.panic_nicely();
+            panic!("Failed to parse fill zero page script");
+        }
+    }
+}
+
 fn main() {
     match NesFrontend::new() {
         Ok(mut system) => {
             if let Err(message) = system.run() {
                 eprintln!("Front-end error: {message}");
+            } else {
+                println!("Exiting gracefully");
             }
         }
         Err(message) => {

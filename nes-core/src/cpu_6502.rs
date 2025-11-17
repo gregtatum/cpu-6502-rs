@@ -175,6 +175,9 @@ impl Cpu6502 {
         if self.peek_u8() == OpCode::KIL as u8 {
             return ExitReason::KIL;
         }
+        // On a break advance foward. TODO - This is not "correct" but nice for
+        // development. This should use NMI instead.
+        self.next_u8();
         return ExitReason::BRK;
     }
 
