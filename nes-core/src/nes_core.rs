@@ -1,10 +1,16 @@
 use std::rc::Rc;
 
-use crate::cpu_6502::Cpu6502;
+use crate::cpu_6502::{Cpu6502, ExitReason};
 use crate::{
     bus::{Bus, SharedBus},
     mappers::Mapper,
 };
+
+/// NTSC CPU clock divided by 60Hz frame rate gives ~29,829 CPU ticks per frame.
+/// https://www.nesdev.org/wiki/Clock_rate
+const NTSC_CPU_HZ: f64 = 1_789_773.0;
+const NTSC_FRAME_RATE: f64 = 60.0;
+const CPU_TICKS_PER_FRAME: u64 = (NTSC_CPU_HZ / NTSC_FRAME_RATE) as u64;
 
 /// The core logic for the NES. It requires a front-end to actually produce
 /// video, sound, and take gamepad input.
@@ -31,8 +37,13 @@ impl NesCore {
         self.cpu.tick();
     }
 
-    pub fn frame(self) {
-        unimplemented!("The frame code must be implemented still.");
+    /// Runs the CPU for at most one frame worth of work.
+    pub fn frame(&mut self) -> ExitReason {
+        let frame_limit = self.cpu.tick_count + CPU_TICKS_PER_FRAME;
+        self.cpu.max_ticks = Some(frame_limit);
+        let exit_reason = self.cpu.run();
+        self.cpu.max_ticks = None;
+        return exit_reason;
     }
 }
 

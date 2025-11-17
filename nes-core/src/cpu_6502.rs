@@ -27,6 +27,14 @@ pub enum StatusFlag {
   Negative         = 0b10000000,
 }
 
+// The reason why a CPU run was ended.
+pub enum ExitReason {
+    KIL,
+    BRK,
+    /// This is usually from breaking the frame budget.
+    MaxTicks,
+}
+
 /// This struct implements the MOS Technology 6502 central processing unit.
 ///
 /// http://www.6502.org/
@@ -121,7 +129,7 @@ impl Cpu6502 {
     }
 
     /// Read the PC without incrementing.
-    fn peek_u8(&mut self) -> u8 {
+    fn peek_u8(&self) -> u8 {
         self.bus.borrow().read_u8(self.pc)
     }
 
@@ -153,17 +161,21 @@ impl Cpu6502 {
     }
 
     /// Run the emulator until the "KIL" or "BRK" command is issued.
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ExitReason {
         while self.peek_u8() != OpCode::KIL as u8 && self.peek_u8() != OpCode::BRK as u8 {
             self.tick();
 
             // If there is a max ticks counter, respect it.
             if let Some(max_ticks) = self.max_ticks {
                 if self.tick_count > max_ticks {
-                    break;
+                    return ExitReason::MaxTicks;
                 }
             }
         }
+        if self.peek_u8() == OpCode::KIL as u8 {
+            return ExitReason::KIL;
+        }
+        return ExitReason::BRK;
     }
 
     /// The source for the comments on the modes is coming from:
