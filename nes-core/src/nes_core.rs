@@ -110,11 +110,7 @@ mod test {
         {
             // Mutate the controller.
             let bus = emulator.bus.borrow();
-            let mut controller = bus
-                .controller_1
-                .as_ref()
-                .expect("controller_1 should exist")
-                .borrow_mut();
+            let mut controller = bus.controller_1.borrow_mut();
 
             controller.a = true;
             controller.select = true;
