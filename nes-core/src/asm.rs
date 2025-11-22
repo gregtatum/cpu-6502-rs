@@ -13,6 +13,8 @@ pub enum Token {
     U16(u16),
     LabelDefinition(StringIndex),
     LabelOperand(StringIndex),
+    LabelDataU16(StringIndex),
+    DirectiveRes { length: usize, fill: u8 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -302,27 +304,64 @@ impl<'a> AsmLexer<'a> {
                             }
                         }
                     }
-                    Character::Value('.') => match self.get_word(None)?.as_ref() {
-                        "byte" => loop {
-                            self.skip_whitespace();
-                            let value = self.next_characters_u8()?;
-                            self.tokens.push(Token::U8(value));
-                            if !self.find_comma()? {
-                                // No comma was found, and we skipped to the end of the line.
-                                break;
+                    Character::Value('.') => {
+                        let pragma = self.get_word(None)?;
+                        let pragma = pragma.to_ascii_lowercase();
+                        match pragma.as_str() {
+                            "byte" | "byt" => loop {
+                                self.skip_whitespace();
+                                let value = self.next_characters_u8()?;
+                                self.tokens.push(Token::U8(value));
+                                if !self.find_comma()? {
+                                    // No comma was found, and we skipped to the end of the line.
+                                    break;
+                                }
+                            },
+                            "word" => loop {
+                                self.skip_whitespace();
+                                let token = match self.characters.peek() {
+                                    Some(character) => match char_to_enum(character) {
+                                        Character::Alpha | Character::Value('_') => {
+                                            let first_char =
+                                                self.next_character_or_err()?;
+                                            let label =
+                                                self.get_word(Some(&first_char))?;
+                                            Token::LabelDataU16(
+                                                self.labels.take_string(label),
+                                            )
+                                        }
+                                        _ => {
+                                            let value = self.next_characters_u16()?;
+                                            Token::U16(value)
+                                        }
+                                    },
+                                    None => {
+                                        return Err(
+                                            "Unexpected end of line while parsing .word"
+                                                .to_string(),
+                                        )
+                                    }
+                                };
+                                self.tokens.push(token);
+                                if !self.find_comma()? {
+                                    // No comma was found, and we skipped to the end of the line.
+                                    break;
+                                }
+                            },
+                            "res" => {
+                                self.skip_whitespace();
+                                let length = self.next_characters_u16()? as usize;
+                                let fill = if self.find_comma()? {
+                                    self.next_characters_u8()?
+                                } else {
+                                    0
+                                };
+                                self.tokens.push(Token::DirectiveRes { length, fill });
+                                self.continue_to_end_of_line()?;
                             }
-                        },
-                        "word" => loop {
-                            self.skip_whitespace();
-                            let value = self.next_characters_u16()?;
-                            self.tokens.push(Token::U16(value));
-                            if !self.find_comma()? {
-                                // No comma was found, and we skipped to the end of the line.
-                                break;
-                            }
-                        },
-                        pragma => return Err(format!("Unknown pragma \".{}\"", pragma)),
-                    },
+                            _ => return Err(format!("Unknown pragma \".{}\"", pragma)),
+                        }
+                    }
                     _ => return Err(format!("Unknown next token. {}", character)),
                 },
                 None => return Ok(()),
@@ -520,6 +559,20 @@ impl<'a> AsmLexer<'a> {
                             "Unexpected LabelOperand operand found. Operands are assumed to follow instructions: {:#x?}",
                             self.labels.strings.get(*string_index).unwrap()
                         ));
+                }
+                Token::LabelDataU16(string_index) => {
+                    self.labels.addresses_to_label.push((
+                        *string_index,
+                        bytes.len(),
+                        LabelMappingType::Absolute,
+                    ));
+                    bytes.push(0);
+                    bytes.push(0);
+                }
+                Token::DirectiveRes { length, fill } => {
+                    for _ in 0..*length {
+                        bytes.push(*fill);
+                    }
                 }
                 Token::U8(value) => bytes.push(*value),
                 Token::U16(value) => {
@@ -1128,6 +1181,17 @@ mod test {
     }
 
     #[test]
+    fn test_byt_alias_and_case_insensitive() {
+        assert_program!(
+            "
+                .ByT $01, $02
+                .BYTE $03
+            ",
+            [0x01, 0x02, 0x03]
+        );
+    }
+
+    #[test]
     fn test_numbers() {
         assert_program!(
             "
@@ -1148,6 +1212,32 @@ mod test {
                 0b11110000,
                 0b11110000
             ]
+        );
+    }
+
+    #[test]
+    fn test_word_labels() {
+        assert_program!(
+            "
+                first:
+                    .word first
+                    .word later
+                later:
+                    brk
+            ",
+            [0x00, 0x80, 0x04, 0x80, 0x00]
+        );
+    }
+
+    #[test]
+    fn test_res_default_and_fill() {
+        assert_program!(
+            "
+                .res 3
+                .res 2, $aa
+                lda #$01
+            ",
+            [0x00, 0x00, 0x00, 0xaa, 0xaa, LDA_imm, 0x01]
         );
     }
 
