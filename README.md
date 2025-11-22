@@ -6,7 +6,7 @@ This is a side project to build an NES emulator. It's mostly me learning some lo
 
 ## How to run
 
-> The WIP PPU code requires SLD2 to be installed. On macOS `brew install sdl2`. You may need to adjust `.cargo/config.toml`.
+> The WIP PPU code requires SLD2 to be installed. On macOS `brew install sdl2 sdl2_tff`. You may need to adjust `.cargo/config.toml`.
 
 The CPU debugger and visualizer can visualize the CPU running, and let you step through the code.
 

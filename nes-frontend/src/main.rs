@@ -52,15 +52,15 @@ impl NesFrontend {
                 break;
             }
 
-            // Keep running after BRK so the SDL window stays alive; only exit on KIL.
             match self.nes_core.frame() {
+                // This will exit the entire program.
                 ExitReason::KIL => break,
                 ExitReason::BRK | ExitReason::MaxTicks => {}
             }
 
             if let Some(window) = self.zero_page_window.as_mut() {
                 let bus = self.nes_core.bus.borrow();
-                window.update(&bus)?;
+                window.draw(&bus)?;
             }
 
             let elapsed = frame_start.elapsed();
@@ -96,7 +96,7 @@ fn create_demo_core() -> NesCore {
             lda #$22
             root:
                 sta $00,x
-                adc #1
+                adc #3
                 inx
                 brk
                 jmp root
