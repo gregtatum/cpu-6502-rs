@@ -52,9 +52,10 @@ impl NesFrontend {
                 break;
             }
 
+            // Keep running after BRK so the SDL window stays alive; only exit on KIL.
             match self.nes_core.frame() {
-                ExitReason::KIL | ExitReason::BRK => break,
-                ExitReason::MaxTicks => {}
+                ExitReason::KIL => break,
+                ExitReason::BRK | ExitReason::MaxTicks => {}
             }
 
             if let Some(window) = self.zero_page_window.as_mut() {
