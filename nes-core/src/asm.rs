@@ -27,6 +27,7 @@ pub enum Character {
     Value(char),
 }
 
+#[derive(Clone, Copy)]
 pub enum U8OrU16 {
     U8(u8),
     U16(u16),
@@ -235,6 +236,7 @@ pub struct AsmLexer<'a> {
     characters: std::iter::Peekable<Chars<'a>>,
     tokens: Vec<Token>,
     labels: LabelTable,
+    aliases: HashMap<String, U8OrU16>,
     row: u64,
     column: u64,
 }
@@ -247,6 +249,7 @@ impl<'a> AsmLexer<'a> {
             lines: IntoIterator::into_iter(text.lines()),
             tokens: Vec::new(),
             labels: LabelTable::new(),
+            aliases: HashMap::new(),
             column: 1,
             row: 1,
         }
@@ -258,6 +261,10 @@ impl<'a> AsmLexer<'a> {
             self.column += 1;
         }
         character
+    }
+
+    fn lookup_alias(&self, name: &str) -> Option<U8OrU16> {
+        self.aliases.get(name).copied()
     }
 
     /// Run the lexer by parsing the characters into tokens. Things like labels
@@ -326,9 +333,17 @@ impl<'a> AsmLexer<'a> {
                                                 self.next_character_or_err()?;
                                             let label =
                                                 self.get_word(Some(&first_char))?;
-                                            Token::LabelDataU16(
-                                                self.labels.take_string(label),
-                                            )
+                                            match self.lookup_alias(&label) {
+                                                Some(U8OrU16::U8(value)) => {
+                                                    Token::U16(value as u16)
+                                                }
+                                                Some(U8OrU16::U16(value)) => {
+                                                    Token::U16(value)
+                                                }
+                                                None => Token::LabelDataU16(
+                                                    self.labels.take_string(label),
+                                                ),
+                                            }
                                         }
                                         _ => {
                                             let value = self.next_characters_u16()?;
@@ -357,6 +372,24 @@ impl<'a> AsmLexer<'a> {
                                     0
                                 };
                                 self.tokens.push(Token::DirectiveRes { length, fill });
+                                self.continue_to_end_of_line()?;
+                            }
+                            "alias" => {
+                                self.skip_whitespace();
+                                let first_char = self.next_character_or_err()?;
+                                match char_to_enum(&first_char) {
+                                    Character::Alpha | Character::Value('_') => {}
+                                    _ => {
+                                        return Err(format!(
+                                            "Alias names must start with a letter or underscore, found {}",
+                                            first_char
+                                        ))
+                                    }
+                                }
+                                let name = self.get_word(Some(&first_char))?;
+                                self.skip_whitespace();
+                                let value = self.next_characters_u8_or_u16()?;
+                                self.aliases.insert(name, value);
                                 self.continue_to_end_of_line()?;
                             }
                             _ => return Err(format!("Unknown pragma \".{}\"", pragma)),
@@ -643,6 +676,27 @@ impl<'a> AsmLexer<'a> {
                 }
             }
             character => {
+                if character.is_alphabetic() || character == '_' {
+                    let name = self.get_word(Some(&character))?;
+                    match self.lookup_alias(&name) {
+                        Some(U8OrU16::U8(value)) => return Ok(value),
+                        Some(U8OrU16::U16(value)) => {
+                            if value > u8::MAX as u16 {
+                                return Err(format!(
+                                    "Alias \"{}\" value ${:04x} does not fit in a byte",
+                                    name, value
+                                ));
+                            }
+                            return Ok(value as u8);
+                        }
+                        None => {
+                            return Err(format!(
+                                "Unknown alias \"{}\" used where a byte was expected",
+                                name
+                            ))
+                        }
+                    }
+                }
                 let number = self.get_word(Some(&character))?;
                 match u8::from_str_radix(&number, 10) {
                     Ok(number) => Ok(number),
@@ -677,6 +731,19 @@ impl<'a> AsmLexer<'a> {
                 }
             }
             character => {
+                if character.is_alphabetic() || character == '_' {
+                    let name = self.get_word(Some(&character))?;
+                    match self.lookup_alias(&name) {
+                        Some(U8OrU16::U8(value)) => return Ok(value as u16),
+                        Some(U8OrU16::U16(value)) => return Ok(value),
+                        None => {
+                            return Err(format!(
+                                "Unknown alias \"{}\" used where a word was expected",
+                                name
+                            ))
+                        }
+                    }
+                }
                 let number = self.get_word(Some(&character))?;
                 match u16::from_str_radix(&number, 10) {
                     Ok(number) => Ok(number),
@@ -733,8 +800,18 @@ impl<'a> AsmLexer<'a> {
                 }
             }
             character => {
-                // TODO - Is it possible to differentiate U8 or U16 here? For now assume
-                // that it's u8.
+                if character.is_alphabetic() || character == '_' {
+                    let name = self.get_word(Some(&character))?;
+                    match self.lookup_alias(&name) {
+                        Some(value) => return Ok(value),
+                        None => {
+                            return Err(format!(
+                                "Unknown alias \"{}\" used where a number was expected",
+                                name
+                            ))
+                        }
+                    }
+                }
                 let number = self.get_word(Some(&character))?;
                 match u8::from_str_radix(&number, 10) {
                     Ok(number) => Ok(U8OrU16::U8(number)),
@@ -790,6 +867,8 @@ impl<'a> AsmLexer<'a> {
                 let word = self.get_word(None)?;
                 if word == "A" || word == "a" {
                     self.tokens.push(Token::Mode(TokenMode::RegisterA));
+                } else if let Some(alias_value) = self.lookup_alias(&word) {
+                    return self.handle_numeric_operand(alias_value);
                 } else {
                     let label = Token::LabelOperand(self.labels.take_string(word));
                     self.tokens.push(label);
@@ -812,54 +891,8 @@ impl<'a> AsmLexer<'a> {
             Character::Value('$')
             | Character::Value('%')
             | Character::Numeric => {
-                match self.next_characters_u8_or_u16()? {
-                    U8OrU16::U8(value_u8) => {
-                        // Figure out the mode.
-                        if self.peek_is_next_character(',') {
-                            // Skip the ","
-                            self.next_character_or_err()?;
-                            let character = self.next_character_or_err()?;
-                            self.tokens.push(match character {
-                                'x' | 'X' => Token::Mode(TokenMode::ZeroPageX),
-                                'y' | 'Y' => Token::Mode(TokenMode::ZeroPageY),
-                                _ => {
-                                    return Err(format!(
-                                        "Unexpected index mode: {}",
-                                        character
-                                    ))
-                                }
-                            });
-                        } else {
-                            self.tokens
-                                .push(Token::Mode(TokenMode::ZeroPageOrRelative));
-                        }
-
-                        self.tokens.push(Token::U8(value_u8));
-                    }
-                    U8OrU16::U16(value_u16) => {
-                        // Figure out the mode.
-                        if self.peek_is_next_character(',') {
-                            // Skip the ","
-                            self.next_character_or_err()?;
-                            let character = self.next_character_or_err()?;
-                            self.tokens.push(match character {
-                                'x' | 'X' => Token::Mode(TokenMode::AbsoluteIndexedX),
-                                'y' | 'Y' => Token::Mode(TokenMode::AbsoluteIndexedY),
-                                _ => {
-                                    return Err(format!(
-                                        "Unexpected index mode: {}",
-                                        character
-                                    ))
-                                }
-                            });
-                        } else {
-                            self.tokens.push(Token::Mode(TokenMode::Absolute));
-                        }
-
-                        self.tokens.push(Token::U16(value_u16));
-                    }
-                }
-                return self.continue_to_end_of_line();
+                let value = self.next_characters_u8_or_u16()?;
+                return self.handle_numeric_operand(value);
             }
             Character::Value('(') => {
                 // jmp ($1234) ; indirect
@@ -910,6 +943,42 @@ impl<'a> AsmLexer<'a> {
             }
         });
         self.verify_instruction_needs_no_operand(instruction)
+    }
+
+    fn handle_numeric_operand(&mut self, value: U8OrU16) -> Result<(), String> {
+        match value {
+            U8OrU16::U8(value_u8) => {
+                if self.peek_is_next_character(',') {
+                    self.next_character_or_err()?;
+                    let character = self.next_character_or_err()?;
+                    self.tokens.push(match character {
+                        'x' | 'X' => Token::Mode(TokenMode::ZeroPageX),
+                        'y' | 'Y' => Token::Mode(TokenMode::ZeroPageY),
+                        _ => return Err(format!("Unexpected index mode: {}", character)),
+                    });
+                } else {
+                    self.tokens.push(Token::Mode(TokenMode::ZeroPageOrRelative));
+                }
+
+                self.tokens.push(Token::U8(value_u8));
+            }
+            U8OrU16::U16(value_u16) => {
+                if self.peek_is_next_character(',') {
+                    self.next_character_or_err()?;
+                    let character = self.next_character_or_err()?;
+                    self.tokens.push(match character {
+                        'x' | 'X' => Token::Mode(TokenMode::AbsoluteIndexedX),
+                        'y' | 'Y' => Token::Mode(TokenMode::AbsoluteIndexedY),
+                        _ => return Err(format!("Unexpected index mode: {}", character)),
+                    });
+                } else {
+                    self.tokens.push(Token::Mode(TokenMode::Absolute));
+                }
+
+                self.tokens.push(Token::U16(value_u16));
+            }
+        }
+        self.continue_to_end_of_line()
     }
 
     fn verify_instruction_needs_no_operand(
@@ -1211,6 +1280,27 @@ mod test {
                 0x00,
                 0b11110000,
                 0b11110000
+            ]
+        );
+    }
+
+    #[test]
+    fn test_alias_usage() {
+        assert_program!(
+            "
+                .alias TwosCompliment $c3d4
+                .alias ZeroPage $44
+                .alias ConstTen 10
+                lda #ZeroPage
+                lda ZeroPage
+                lda ConstTen,x
+                jsr TwosCompliment
+                .byte ZeroPage
+                .word TwosCompliment
+            ",
+            [
+                LDA_imm, 0x44, LDA_zp, 0x44, LDA_zpx, 0x0a, JSR_abs, 0xd4, 0xc3, 0x44,
+                0xd4, 0xc3
             ]
         );
     }
