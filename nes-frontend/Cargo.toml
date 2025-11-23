@@ -7,3 +7,6 @@ edition = "2018"
 [dependencies]
 nes-core = { path = "../nes-core" }
 sdl2 = { workspace = true, features = ["ttf", "unsafe_textures"] }
+
+[package.metadata.bundle]
+icon = ["assets/macos/NesFrontend.icns"]
