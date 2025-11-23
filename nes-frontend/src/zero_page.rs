@@ -134,7 +134,7 @@ impl ZeroPageWindow {
 
             // Fill in the background.
             let mut color = byte_to_color(byte);
-            let dim = dim_factor(self.hover, row as u8, col as u8);
+            let dim = dim_factor(self.hover, self.selected, row as u8, col as u8);
             apply_dim(&mut color, dim);
             canvas.set_draw_color(color);
             canvas
@@ -164,6 +164,16 @@ impl ZeroPageWindow {
                 canvas
                     .fill_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
                     .map_err(|e| e.to_string())?;
+            }
+
+            // Highlight selected cell with white border.
+            if let Some((sr, sc)) = self.selected {
+                if sr == row && sc == col {
+                    canvas.set_draw_color(Color::RGB(255, 255, 255));
+                    canvas
+                        .draw_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
+                        .map_err(|e| e.to_string())?;
+                }
             }
         }
 
@@ -386,7 +396,18 @@ impl HeaderTextures {
     }
 }
 
-fn dim_factor(hover: Option<(u8, u8)>, row: u8, col: u8) -> f32 {
+fn dim_factor(
+    hover: Option<(u8, u8)>,
+    selected: Option<(u8, u8)>,
+    row: u8,
+    col: u8,
+) -> f32 {
+    if let Some((sr, sc)) = selected {
+        if sr == row && sc == col {
+            return 1.0;
+        }
+    }
+
     match hover {
         None => 1.0,
         Some((hr, hc)) => {
