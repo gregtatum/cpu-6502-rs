@@ -1,3 +1,4 @@
+use egui::{pos2, Event as EguiEvent, Modifiers as EguiModifiers};
 use nes_core::bus::Bus;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
@@ -9,6 +10,7 @@ use sdl2::{
     keyboard::Keycode,
     mouse::MouseButton,
     render::BlendMode,
+    ttf,
 };
 use std::cell::RefCell;
 
@@ -38,6 +40,12 @@ pub struct ZeroPageWindow {
     hex_textures: HexTextures,
     header_textures: HeaderTextures,
     texture_creator: TextureCreator<WindowContext>,
+    egui_ctx: egui::Context,
+    egui_events: Vec<EguiEvent>,
+    sidebar_text: String,
+    egui_wants_keyboard: bool,
+    egui_wants_pointer: bool,
+    egui_modifiers: EguiModifiers,
     hover: Option<(u8, u8)>,    // (row, col)
     selected: Option<(u8, u8)>, // (row, col)
     pub window_id: u32,
@@ -77,6 +85,12 @@ impl ZeroPageWindow {
             texture_creator,
             hex_textures: Default::default(),
             header_textures: Default::default(),
+            egui_ctx: egui::Context::default(),
+            egui_events: Vec::new(),
+            sidebar_text: String::new(),
+            egui_wants_keyboard: false,
+            egui_wants_pointer: false,
+            egui_modifiers: EguiModifiers::default(),
             hover: None,
             selected: None,
             window_id,
@@ -84,6 +98,7 @@ impl ZeroPageWindow {
 
         view.hex_textures.build_textures(&view.texture_creator)?;
         view.header_textures.build_textures(&view.texture_creator)?;
+        video_subsystem.text_input().start();
 
         Ok(view)
     }
@@ -95,6 +110,11 @@ impl ZeroPageWindow {
                 x, y, window_id, ..
             } => {
                 if *window_id != self.window_id {
+                    return;
+                }
+                self.egui_events
+                    .push(EguiEvent::PointerMoved(pos2(*x as f32, *y as f32)));
+                if self.egui_wants_pointer {
                     return;
                 }
                 self.hover = cell_from_point(*x, *y);
@@ -109,8 +129,38 @@ impl ZeroPageWindow {
                 if *window_id != self.window_id {
                     return;
                 }
+                if *mouse_btn == MouseButton::Left {
+                    self.egui_events.push(EguiEvent::PointerButton {
+                        pos: pos2(*x as f32, *y as f32),
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: self.egui_modifiers,
+                    });
+                }
+                if self.egui_wants_pointer {
+                    return;
+                }
                 if let Some((row, col)) = cell_from_point(*x, *y) {
                     self.select_cell(row, col);
+                }
+            }
+            Event::MouseButtonUp {
+                x,
+                y,
+                window_id,
+                mouse_btn,
+                ..
+            } => {
+                if *window_id != self.window_id {
+                    return;
+                }
+                if *mouse_btn == MouseButton::Left {
+                    self.egui_events.push(EguiEvent::PointerButton {
+                        pos: pos2(*x as f32, *y as f32),
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: self.egui_modifiers,
+                    });
                 }
             }
             Event::Window {
@@ -118,12 +168,36 @@ impl ZeroPageWindow {
                 window_id,
                 ..
             } if *window_id == self.window_id => {
+                self.egui_events.push(EguiEvent::PointerGone);
                 self.hover = None;
             }
             Event::KeyDown {
-                keycode: Some(key), ..
+                keycode: Some(key),
+                keymod,
+                ..
             } => {
-                self.handle_key(*key);
+                self.egui_modifiers = to_egui_modifiers(*keymod);
+                if let Some(event) = to_egui_key_event(*key, true, self.egui_modifiers) {
+                    self.egui_events.push(event);
+                }
+                if !self.egui_wants_keyboard {
+                    self.handle_key(*key);
+                }
+            }
+            Event::KeyUp {
+                keycode: Some(key),
+                keymod,
+                ..
+            } => {
+                self.egui_modifiers = to_egui_modifiers(*keymod);
+                if let Some(event) = to_egui_key_event(*key, false, self.egui_modifiers) {
+                    self.egui_events.push(event);
+                }
+            }
+            Event::TextInput {
+                text, window_id, ..
+            } if *window_id == self.window_id => {
+                self.egui_events.push(EguiEvent::Text(text.clone()));
             }
             _ => {}
         }
@@ -278,29 +352,148 @@ impl ZeroPageWindow {
     }
 
     fn draw_sidebar(&mut self) -> Result<(), String> {
+        {
+            let mut canvas = self.canvas.borrow_mut();
+
+            // Sidebar background.
+            canvas.set_draw_color(Color::RGB(24, 24, 24));
+            canvas
+                .fill_rect(Rect::new(
+                    GRID_WIDTH as i32,
+                    0,
+                    SIDEBAR_WIDTH,
+                    WINDOW_HEIGHT,
+                ))
+                .map_err(|e| e.to_string())?;
+
+            // Separator line between grid and sidebar.
+            canvas.set_draw_color(Color::RGB(255, 255, 255));
+            canvas
+                .draw_line(
+                    (GRID_WIDTH as i32, 0),
+                    (GRID_WIDTH as i32, WINDOW_HEIGHT as i32),
+                )
+                .map_err(|e| e.to_string())?;
+        }
+
+        self.draw_sidebar_ui()
+    }
+
+    fn draw_sidebar_ui(&mut self) -> Result<(), String> {
+        let raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                pos2(0.0, 0.0),
+                egui::vec2(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32),
+            )),
+            pixels_per_point: Some(1.0),
+            events: std::mem::take(&mut self.egui_events),
+            ..Default::default()
+        };
+
+        let egui_ctx = self.egui_ctx.clone();
+        let sidebar_text = &mut self.sidebar_text;
+
+        let _ = egui_ctx.run(raw_input, |ctx| {
+            egui::Area::new("sidebar")
+                .fixed_pos(pos2(GRID_WIDTH as f32, 0.0))
+                .show(ctx, |ui| {
+                    ui.set_width(SIDEBAR_WIDTH as f32);
+                    ui.heading("Zero Page");
+                    ui.separator();
+                    ui.label("Notes");
+                    let response = ui.text_edit_singleline(sidebar_text);
+                    if response.gained_focus() {
+                        response.request_focus();
+                    }
+                    if response.has_focus() {
+                        ui.ctx().request_repaint();
+                    }
+                });
+        });
+
+        self.egui_wants_keyboard = egui_ctx.wants_keyboard_input();
+        self.egui_wants_pointer = egui_ctx.wants_pointer_input();
+
+        self.draw_sidebar_textbox()?;
+        Ok(())
+    }
+
+    fn draw_sidebar_textbox(&mut self) -> Result<(), String> {
+        let padding = 12;
+        let text_padding = 8;
+        let heading_y = 12;
+        let textbox_height = 36;
+
+        let Some(label_texture) =
+            self.render_text_texture("Notes", 24, Color::RGB(230, 230, 230))?
+        else {
+            return Ok(());
+        };
+        let label_query = label_texture.query();
+
+        let x = GRID_WIDTH as i32 + padding;
+        let label_rect = Rect::new(x, heading_y, label_query.width, label_query.height);
+
+        let textbox_y = heading_y + label_query.height as i32 + 8;
+        let textbox_rect = Rect::new(
+            x,
+            textbox_y,
+            SIDEBAR_WIDTH - (padding as u32 * 2),
+            textbox_height,
+        );
+
         let mut canvas = self.canvas.borrow_mut();
+        canvas.copy(&label_texture, None, Some(label_rect))?;
 
-        // Sidebar background.
-        canvas.set_draw_color(Color::RGB(24, 24, 24));
-        canvas
-            .fill_rect(Rect::new(
-                GRID_WIDTH as i32,
-                0,
-                SIDEBAR_WIDTH,
-                WINDOW_HEIGHT,
-            ))
-            .map_err(|e| e.to_string())?;
-
-        // Separator line between grid and sidebar.
+        canvas.set_draw_color(Color::RGB(40, 40, 40));
+        canvas.fill_rect(textbox_rect)?;
         canvas.set_draw_color(Color::RGB(255, 255, 255));
-        canvas
-            .draw_line(
-                (GRID_WIDTH as i32, 0),
-                (GRID_WIDTH as i32, WINDOW_HEIGHT as i32),
-            )
-            .map_err(|e| e.to_string())?;
+        canvas.draw_rect(textbox_rect)?;
+
+        if !self.sidebar_text.is_empty() {
+            if let Some(text_texture) = self.render_text_texture(
+                &self.sidebar_text,
+                22,
+                Color::RGB(230, 230, 230),
+            )? {
+                let query = text_texture.query();
+                let text_rect = Rect::new(
+                    x + text_padding,
+                    textbox_y + (textbox_height as i32 - query.height as i32) / 2,
+                    query.width,
+                    query.height,
+                );
+                canvas.copy(&text_texture, None, Some(text_rect))?;
+            }
+        }
 
         Ok(())
+    }
+
+    fn render_text_texture(
+        &self,
+        text: &str,
+        size: u16,
+        color: Color,
+    ) -> Result<Option<Texture>, String> {
+        if text.is_empty() {
+            return Ok(None);
+        }
+
+        let ttf_context = ttf::init().map_err(|e| e.to_string())?;
+        let font = ttf_context
+            .load_font("assets/liberation_mono/LiberationMono-Regular.ttf", size)
+            .map_err(|e| e.to_string())?;
+
+        let surface = font
+            .render(text)
+            .blended(color)
+            .map_err(|e| e.to_string())?;
+        let texture = self
+            .texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(|e| e.to_string())?;
+        Ok(Some(texture))
     }
 
     fn select_cell(&mut self, row: u8, col: u8) {
@@ -557,6 +750,51 @@ fn dim_factor_side(hover: Option<(u8, u8)>, selected: Option<(u8, u8)>, row: u8)
 fn apply_dim(color: &mut Color, factor: f32) {
     let scale = |v: u8| ((v as f32 * factor).round().clamp(0.0, 255.0)) as u8;
     *color = Color::RGB(scale(color.r), scale(color.g), scale(color.b));
+}
+
+fn to_egui_modifiers(keymod: sdl2::keyboard::Mod) -> EguiModifiers {
+    EguiModifiers {
+        alt: keymod
+            .intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD),
+        ctrl: keymod
+            .intersects(sdl2::keyboard::Mod::LCTRLMOD | sdl2::keyboard::Mod::RCTRLMOD),
+        shift: keymod
+            .intersects(sdl2::keyboard::Mod::LSHIFTMOD | sdl2::keyboard::Mod::RSHIFTMOD),
+        mac_cmd: keymod
+            .intersects(sdl2::keyboard::Mod::LGUIMOD | sdl2::keyboard::Mod::RGUIMOD),
+        command: keymod
+            .intersects(sdl2::keyboard::Mod::LGUIMOD | sdl2::keyboard::Mod::RGUIMOD),
+    }
+}
+
+fn to_egui_key_event(
+    key: Keycode,
+    pressed: bool,
+    modifiers: EguiModifiers,
+) -> Option<EguiEvent> {
+    use egui::Key::*;
+
+    let key = match key {
+        Keycode::Tab => Tab,
+        Keycode::Backspace => Backspace,
+        Keycode::Return => Enter,
+        Keycode::Escape => Escape,
+        Keycode::Left => ArrowLeft,
+        Keycode::Right => ArrowRight,
+        Keycode::Up => ArrowUp,
+        Keycode::Down => ArrowDown,
+        Keycode::Home => Home,
+        Keycode::End => End,
+        Keycode::PageUp => PageUp,
+        Keycode::PageDown => PageDown,
+        _ => return None,
+    };
+
+    Some(EguiEvent::Key {
+        key,
+        pressed,
+        modifiers,
+    })
 }
 
 fn cell_from_point(x: i32, y: i32) -> Option<(u8, u8)> {
