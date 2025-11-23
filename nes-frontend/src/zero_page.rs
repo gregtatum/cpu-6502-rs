@@ -6,6 +6,7 @@ use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
 use sdl2::{
     event::{Event, WindowEvent},
+    keyboard::Keycode,
     mouse::MouseButton,
     render::BlendMode,
 };
@@ -107,12 +108,7 @@ impl ZeroPageWindow {
                     return;
                 }
                 if let Some((row, col)) = cell_from_point(*x, *y) {
-                    self.selected = Some((row, col));
-                    let addr = row as u16 * ZERO_PAGE_SIDE as u16 + col as u16;
-                    println!(
-                        "Selected zero page cell {:02X} (row {}, col {})",
-                        addr, row, col
-                    );
+                    self.select_cell(row, col);
                 }
             }
             Event::Window {
@@ -121,6 +117,13 @@ impl ZeroPageWindow {
                 ..
             } if *window_id == self.window_id => {
                 self.hover = None;
+            }
+            Event::KeyDown {
+                keycode: Some(key),
+                repeat,
+                ..
+            } if !repeat => {
+                self.handle_key(*key);
             }
             _ => {}
         }
@@ -271,6 +274,36 @@ impl ZeroPageWindow {
         }
 
         Ok(())
+    }
+
+    fn select_cell(&mut self, row: u8, col: u8) {
+        self.selected = Some((row, col));
+        let addr = row as u16 * ZERO_PAGE_SIDE as u16 + col as u16;
+        println!(
+            "Selected zero page cell {:02X} (row {}, col {})",
+            addr, row, col
+        );
+    }
+
+    fn handle_key(&mut self, key: Keycode) {
+        match key {
+            Keycode::Up => self.change_selection(-1, 0),
+            Keycode::Down => self.change_selection(1, 0),
+            Keycode::Left => self.change_selection(0, -1),
+            Keycode::Right => self.change_selection(0, 1),
+            _ => return,
+        }
+    }
+
+    fn change_selection(&mut self, d_row: i32, d_col: i32) {
+        let (row0, col0) = self.selected.or(self.hover).unwrap_or((0u8, 0u8));
+        let mut row = row0 as i32 + d_row;
+        let mut col = col0 as i32 + d_col;
+
+        row = row.clamp(0, ZERO_PAGE_SIDE as i32 - 1);
+        col = col.clamp(0, ZERO_PAGE_SIDE as i32 - 1);
+
+        self.select_cell(row as u8, col as u8);
     }
 }
 
