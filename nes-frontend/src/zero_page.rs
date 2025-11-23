@@ -38,7 +38,7 @@ pub struct ZeroPageWindow {
     texture_creator: TextureCreator<WindowContext>,
     hover: Option<(u8, u8)>,    // (row, col)
     selected: Option<(u8, u8)>, // (row, col)
-    window_id: u32,
+    pub window_id: u32,
 }
 
 impl ZeroPageWindow {
