@@ -1,29 +1,36 @@
-use std::env;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-fn main() -> Result<(), String> {
-    let mut args = env::args().skip(1);
-    let Some(cmd) = args.next() else {
-        return Err(
-            "usage: cargo run -p task -- run-frontend [--release] [--direct]".into(),
-        );
-    };
+#[derive(Parser)]
+#[command(author, version, about, long_about = None, disable_help_subcommand = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    match cmd.as_str() {
-        "run-frontend" => {
-            let mut release = false;
-            let mut direct = false;
-            for arg in args {
-                match arg.as_str() {
-                    "--release" => release = true,
-                    "--direct" => direct = true,
-                    _ => return Err("unknown flag. try: --release or --direct".into()),
-                }
-            }
-            run_frontend(release, direct)
-        }
-        _ => Err("unknown command. try: run-frontend [--release] [--direct]".into()),
+#[derive(Subcommand)]
+enum Commands {
+    /// Bundle the frontend app and run it
+    #[command(name = "run-frontend")]
+    RunFrontend(RunFrontendArgs),
+}
+
+#[derive(Parser)]
+struct RunFrontendArgs {
+    /// Build and run the release bundle
+    #[arg(long)]
+    release: bool,
+    /// Execute the built binary directly instead of using `open`
+    #[arg(long)]
+    direct: bool,
+}
+
+fn main() -> Result<(), String> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::RunFrontend(args) => run_frontend(args.release, args.direct),
     }
 }
 

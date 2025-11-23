@@ -197,10 +197,7 @@ fn ensure_assets_workdir() -> Result<(), String> {
     // When launched via .app, the cwd is inside Contents/MacOS; walk ancestors to find the repo root.
     let exe = env::current_exe().map_err(|e| e.to_string())?;
     for ancestor in exe.ancestors() {
-        let bases = [
-            ancestor.join("assets"),
-            ancestor.join("Resources/assets"),
-        ];
+        let bases = [ancestor.join("assets"), ancestor.join("Resources/assets")];
         for base in bases {
             let candidate = base.join("liberation_mono/LiberationMono-Regular.ttf");
             if candidate.exists() {
