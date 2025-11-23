@@ -4,6 +4,7 @@ use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
+use sdl2::{event::Event, render::BlendMode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -15,6 +16,8 @@ const HEADER_SIZE: u32 = CELL_SCALE;
 const FONT_SIZE: u16 = 80;
 const WINDOW_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
 const WINDOW_HEIGHT: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
+const DIM_1: f32 = 0.8;
+const DIM_2: f32 = 0.6;
 
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
@@ -27,6 +30,8 @@ pub struct ZeroPageWindow {
     hex_textures: HexTextures,
     header_textures: HeaderTextures,
     texture_creator: TextureCreator<WindowContext>,
+    hover: Option<(u8, u8)>, // (row, col)
+    window_id: u32,
 }
 
 impl ZeroPageWindow {
@@ -54,18 +59,56 @@ impl ZeroPageWindow {
             .set_logical_size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .map_err(|e| e.to_string())?;
 
+        canvas.set_blend_mode(BlendMode::Blend);
+
+        let window_id = canvas.window().id();
         let texture_creator = canvas.texture_creator();
         let mut view = Self {
             canvas: RefCell::new(canvas),
             texture_creator,
             hex_textures: Default::default(),
             header_textures: Default::default(),
+            hover: None,
+            window_id,
         };
 
         view.hex_textures.build_textures(&view.texture_creator)?;
         view.header_textures.build_textures(&view.texture_creator)?;
 
         Ok(view)
+    }
+
+    /// Handle mouse motion to track hovered cell.
+    pub fn handle_event(&mut self, event: &Event) {
+        if let Event::MouseMotion {
+            x, y, window_id, ..
+        } = event
+        {
+            if *window_id != self.window_id {
+                return;
+            }
+
+            let x = *x;
+            let y = *y;
+
+            // Translate from screen to grid (subtract header).
+            let grid_x = x - HEADER_SIZE as i32;
+            let grid_y = y - HEADER_SIZE as i32;
+
+            if grid_x < 0 || grid_y < 0 {
+                self.hover = None;
+                return;
+            }
+
+            let col = (grid_x as u32) / CELL_SCALE;
+            let row = (grid_y as u32) / CELL_SCALE;
+
+            if col < ZERO_PAGE_SIDE as u32 && row < ZERO_PAGE_SIDE as u32 {
+                self.hover = Some((row as u8, col as u8));
+            } else {
+                self.hover = None;
+            }
+        }
     }
 
     /// Draw the view.
@@ -81,11 +124,16 @@ impl ZeroPageWindow {
         for index in 0..ZERO_PAGE_BYTES {
             let byte = bus.read_u8(index);
             let mut canvas = self.canvas.borrow_mut();
-            let x = (index as u32 % ZERO_PAGE_SIDE as u32) * CELL_SCALE + HEADER_SIZE;
-            let y = (index as u32 / ZERO_PAGE_SIDE as u32) * CELL_SCALE + HEADER_SIZE;
+            let col = (index as u32 % ZERO_PAGE_SIDE as u32) as u8;
+            let row = (index as u32 / ZERO_PAGE_SIDE as u32) as u8;
+            let x = col as u32 * CELL_SCALE + HEADER_SIZE;
+            let y = row as u32 * CELL_SCALE + HEADER_SIZE;
 
             // Fill in the background.
-            canvas.set_draw_color(byte_to_color(byte));
+            let mut color = byte_to_color(byte);
+            let dim = dim_factor(self.hover, row as u8, col as u8);
+            apply_dim(&mut color, dim);
+            canvas.set_draw_color(color);
             canvas
                 .fill_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
                 .map_err(|e| e.to_string())?;
@@ -105,6 +153,15 @@ impl ZeroPageWindow {
                 (CELL_SCALE - CELL_PADDING * 2) as u32,
             );
             canvas.copy(&texture, None, Some(target))?;
+
+            // Dim overlay (covers both background and text).
+            if dim < 1.0 {
+                let alpha = ((1.0 - dim) * 255.0) as u8;
+                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
+                canvas
+                    .fill_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
+                    .map_err(|e| e.to_string())?;
+            }
         }
 
         Ok(())
@@ -151,6 +208,16 @@ impl ZeroPageWindow {
                 (CELL_SCALE - CELL_PADDING * 2) as u32,
             );
             canvas.copy(texture, None, Some(target))?;
+
+            // Dim overlay for header cell.
+            let dim = dim_factor_top(self.hover, col as u8);
+            if dim < 1.0 {
+                let alpha = ((1.0 - dim) * 255.0) as u8;
+                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
+                canvas
+                    .fill_rect(Rect::new(x, y, CELL_SCALE, CELL_SCALE))
+                    .map_err(|e| e.to_string())?;
+            }
         }
 
         // Left header column.
@@ -166,6 +233,16 @@ impl ZeroPageWindow {
                 (CELL_SCALE - CELL_PADDING * 2) as u32,
             );
             canvas.copy(texture, None, Some(target))?;
+
+            // Dim overlay for header cell.
+            let dim = dim_factor_side(self.hover, row as u8);
+            if dim < 1.0 {
+                let alpha = ((1.0 - dim) * 255.0) as u8;
+                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
+                canvas
+                    .fill_rect(Rect::new(x, y, CELL_SCALE, CELL_SCALE))
+                    .map_err(|e| e.to_string())?;
+            }
         }
 
         Ok(())
@@ -304,4 +381,50 @@ impl HeaderTextures {
     pub fn side(&self, index: u8) -> &Texture {
         &self.side[index as usize]
     }
+}
+
+fn dim_factor(hover: Option<(u8, u8)>, row: u8, col: u8) -> f32 {
+    match hover {
+        None => 1.0,
+        Some((hr, hc)) => {
+            if hr == row && hc == col {
+                1.0
+            } else if hr == row || hc == col {
+                DIM_1
+            } else {
+                DIM_2
+            }
+        }
+    }
+}
+
+fn dim_factor_top(hover: Option<(u8, u8)>, col: u8) -> f32 {
+    match hover {
+        None => 1.0,
+        Some((_, hc)) => {
+            if hc == col {
+                1.0
+            } else {
+                DIM_2
+            }
+        }
+    }
+}
+
+fn dim_factor_side(hover: Option<(u8, u8)>, row: u8) -> f32 {
+    match hover {
+        None => 1.0,
+        Some((hr, _)) => {
+            if hr == row {
+                1.0
+            } else {
+                DIM_2
+            }
+        }
+    }
+}
+
+fn apply_dim(color: &mut Color, factor: f32) {
+    let scale = |v: u8| ((v as f32 * factor).round().clamp(0.0, 255.0)) as u8;
+    *color = Color::RGB(scale(color.r), scale(color.g), scale(color.b));
 }

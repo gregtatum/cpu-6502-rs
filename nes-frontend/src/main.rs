@@ -81,7 +81,12 @@ impl NesFrontend {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => return Ok(true),
-                _ => self.controller_manager.handle_event(&event, &self.nes_core),
+                _ => {
+                    if let Some(window) = self.zero_page_window.as_mut() {
+                        window.handle_event(&event);
+                    }
+                    self.controller_manager.handle_event(&event, &self.nes_core)
+                }
             }
         }
 
