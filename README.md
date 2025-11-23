@@ -60,5 +60,5 @@ To view the logs of the visualizer append the following:
 I also built a simple game visualizer which can run the snake game from the [Easy 6502 tutorial](https://skilldrick.github.io/easy6502/).
 
 ```
-cargo run -p simple-game -- crates/simple-game/asm/snake.asm
+cargo run -p simple-game -- simple-game/asm/snake.asm
 ```

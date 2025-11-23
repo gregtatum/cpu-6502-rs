@@ -91,8 +91,6 @@ pub struct System {
     pub sdl_context: Sdl,
     pub canvas: RefCell<Canvas<Window>>,
     pub window_size: u32,
-    pub window_scale: u32,
-    pub device_pixels: u32,
     pub texture_creator: TextureCreator<WindowContext>,
 }
 
@@ -118,8 +116,6 @@ impl System {
             sdl_context,
             canvas,
             window_size,
-            window_scale,
-            device_pixels,
             texture_creator,
         }
     }

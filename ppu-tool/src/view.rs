@@ -1,6 +1,5 @@
 use crate::state::{State, View};
 use crate::{constants::*, state::PaletteChange};
-use egui::epaint::Hsva;
 use std::cell::RefCell;
 
 pub fn side_panel(ctx: &egui::Context, state: &RefCell<State>) {
@@ -132,29 +131,6 @@ pub fn main_art_view(state: &RefCell<State>) {
                 ..Default::default()
             },
         );
-    }
-}
-
-pub trait ColorConvert {
-    fn into_egui_hsva(&self) -> egui::ecolor::Hsva;
-    fn into_mq_color(&self) -> macroquad::color::Color;
-}
-
-impl ColorConvert for egui::ecolor::Hsva {
-    fn into_egui_hsva(&self) -> egui::ecolor::Hsva {
-        *self
-    }
-    fn into_mq_color(&self) -> macroquad::color::Color {
-        self.to_rgba_unmultiplied().into()
-    }
-}
-
-impl ColorConvert for macroquad::color::Color {
-    fn into_egui_hsva(&self) -> egui::ecolor::Hsva {
-        Hsva::from_rgba_unmultiplied(self.r, self.g, self.b, self.a)
-    }
-    fn into_mq_color(&self) -> macroquad::color::Color {
-        *self
     }
 }
 

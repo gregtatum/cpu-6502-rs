@@ -5,6 +5,7 @@
 use egui_miniquad::EguiMq;
 use macroquad::prelude::*;
 use miniquad as mq;
+use std::sync::{Mutex, OnceLock};
 
 pub use egui;
 pub use macroquad;
@@ -12,17 +13,12 @@ pub use macroquad;
 struct Egui(EguiMq, usize);
 
 // Global variable and global functions because it's more like macroquad way
-static mut EGUI: Option<Egui> = None;
+static EGUI: OnceLock<Mutex<Egui>> = OnceLock::new();
 
-fn get_egui() -> &'static mut Egui {
-    unsafe {
-        if let Some(egui) = &mut EGUI {
-            egui
-        } else {
-            EGUI = Some(Egui::new());
-            EGUI.as_mut().unwrap()
-        }
-    }
+fn get_egui() -> std::sync::MutexGuard<'static, Egui> {
+    EGUI.get_or_init(|| Mutex::new(Egui::new()))
+        .lock()
+        .expect("EGUI mutex poisoned")
 }
 
 impl Egui {
@@ -50,18 +46,21 @@ impl Egui {
 
 /// Calculates egui ui. Must be called once per frame.
 pub fn ui<F: FnOnce(&egui::Context)>(f: F) {
-    get_egui().ui(|_, ctx| f(ctx))
+    let mut egui = get_egui();
+    egui.ui(|_, ctx| f(ctx))
 }
 
 /// Configure egui without beginning or ending a frame.
 #[allow(dead_code)]
 pub fn cfg<F: FnOnce(&egui::Context)>(f: F) {
-    f(get_egui().0.egui_ctx());
+    let egui = get_egui();
+    f(egui.0.egui_ctx());
 }
 
 /// Draw egui ui. Must be called after `ui` and once per frame.
 pub fn draw() {
-    get_egui().draw()
+    let mut egui = get_egui();
+    egui.draw()
 }
 
 impl mq::EventHandler for Egui {

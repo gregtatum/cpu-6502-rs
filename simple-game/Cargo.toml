@@ -8,4 +8,4 @@ edition = "2018"
 nes-core = { path = "../nes-core" }
 colored = { workspace = true }
 rand = { workspace = true }
-sdl2 = { workspace = true }
+sdl2 = { workspace = true, features = ["unsafe_textures"] }

@@ -8,7 +8,7 @@ edition = "2018"
 colored = { workspace = true }
 tui = { workspace = true }
 termion = { workspace = true }
-sdl2 = { workspace = true }
+sdl2 = { workspace = true, features = ["unsafe_textures"] }
 rand = { workspace = true }
 nes-core = { path = "../nes-core" }
 

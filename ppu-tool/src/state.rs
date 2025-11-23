@@ -10,7 +10,6 @@ pub struct State {
     pub shortcuts: Shortcuts,
     pub background: Color,
     pub view: View,
-    pub channel_sender: Sender<ThreadMessage>,
     pub channel_receiver: Receiver<ThreadMessage>,
 
     pub nametable: UserBinaryFile,
@@ -61,7 +60,6 @@ impl State {
             background: BEIGE,
             nametable,
             chartable,
-            channel_sender,
             channel_receiver,
             texture: None,
             char_texture: None,

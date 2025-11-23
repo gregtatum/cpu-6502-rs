@@ -12,7 +12,7 @@ fn parse_cli_args() -> String {
             eprintln!(
                 "The simple game expects the first argument to be a path to a raw .asm file."
             );
-            eprintln!("cargo run -p simple-game crates/simple-game/asm/snake.asm");
+            eprintln!("cargo run -p simple-game simple-game/asm/snake.asm");
             std::process::exit(1);
         }
     }
