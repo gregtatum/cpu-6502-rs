@@ -6,7 +6,6 @@ use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
 use sdl2::{event::Event, mouse::MouseButton, render::BlendMode};
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 const ZERO_PAGE_SIDE: u16 = 16;
 const ZERO_PAGE_BYTES: u16 = ZERO_PAGE_SIDE * ZERO_PAGE_SIDE;
@@ -304,7 +303,7 @@ fn hsv_to_rgb(mut h: f32, s: f32, v: f32) -> (u8, u8, u8) {
 /// lifetimes.
 #[derive(Default)]
 struct HexTextures {
-    textures: HashMap<u8, Texture>,
+    textures: Vec<Texture>,
 }
 
 impl HexTextures {
@@ -327,16 +326,14 @@ impl HexTextures {
             let texture = texture_creator
                 .create_texture_from_surface(&surface)
                 .map_err(|e| e.to_string())?;
-            self.textures.insert(value, texture);
+            self.textures.push(texture);
         }
 
         Ok(())
     }
 
     pub fn get(&self, value: u8) -> &Texture {
-        self.textures
-            .get(&value)
-            .expect("Unable to get a texture from its byte value")
+        &self.textures[value as usize]
     }
 }
 
