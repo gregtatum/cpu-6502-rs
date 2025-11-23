@@ -10,10 +10,11 @@ use std::collections::HashMap;
 const ZERO_PAGE_SIDE: u16 = 16;
 const ZERO_PAGE_BYTES: u16 = ZERO_PAGE_SIDE * ZERO_PAGE_SIDE;
 const CELL_SCALE: u32 = 30;
-const CELL_PADDING: u32 = 3;
+const CELL_PADDING: u32 = 5;
+const HEADER_SIZE: u32 = CELL_SCALE;
 const FONT_SIZE: u16 = 80;
-const WINDOW_WIDTH: u32 = ZERO_PAGE_SIDE as u32 * CELL_SCALE;
-const WINDOW_HEIGHT: u32 = ZERO_PAGE_SIDE as u32 * CELL_SCALE;
+const WINDOW_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
+const WINDOW_HEIGHT: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
 
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
@@ -24,6 +25,7 @@ const WINDOW_HEIGHT: u32 = ZERO_PAGE_SIDE as u32 * CELL_SCALE;
 pub struct ZeroPageWindow {
     canvas: RefCell<Canvas<Window>>,
     hex_textures: HexTextures,
+    header_textures: HeaderTextures,
     texture_creator: TextureCreator<WindowContext>,
 }
 
@@ -57,17 +59,20 @@ impl ZeroPageWindow {
             canvas: RefCell::new(canvas),
             texture_creator,
             hex_textures: Default::default(),
+            header_textures: Default::default(),
         };
 
         view.hex_textures.build_textures(&view.texture_creator)?;
+        view.header_textures.build_textures(&view.texture_creator)?;
 
         Ok(view)
     }
 
     /// Draw the view.
     pub fn draw(&mut self, bus: &Bus) -> Result<(), String> {
-        self.canvas.borrow_mut().present();
         self.draw_memory_cells(&bus)?;
+        self.draw_headers()?;
+        self.canvas.borrow_mut().present();
         Ok(())
     }
 
@@ -76,8 +81,8 @@ impl ZeroPageWindow {
         for index in 0..ZERO_PAGE_BYTES {
             let byte = bus.read_u8(index);
             let mut canvas = self.canvas.borrow_mut();
-            let x = (index as u32 % ZERO_PAGE_SIDE as u32) * CELL_SCALE;
-            let y = (index as u32 / ZERO_PAGE_SIDE as u32) * CELL_SCALE;
+            let x = (index as u32 % ZERO_PAGE_SIDE as u32) * CELL_SCALE + HEADER_SIZE;
+            let y = (index as u32 / ZERO_PAGE_SIDE as u32) * CELL_SCALE + HEADER_SIZE;
 
             // Fill in the background.
             canvas.set_draw_color(byte_to_color(byte));
@@ -100,6 +105,67 @@ impl ZeroPageWindow {
                 (CELL_SCALE - CELL_PADDING * 2) as u32,
             );
             canvas.copy(&texture, None, Some(target))?;
+        }
+
+        Ok(())
+    }
+
+    /// Draw the address headers for rows and columns.
+    fn draw_headers(&mut self) -> Result<(), String> {
+        let mut canvas = self.canvas.borrow_mut();
+
+        // Fill header backgrounds.
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
+        canvas
+            .fill_rect(Rect::new(0, 0, WINDOW_WIDTH, HEADER_SIZE))
+            .map_err(|e| e.to_string())?;
+        canvas
+            .fill_rect(Rect::new(0, 0, HEADER_SIZE, WINDOW_HEIGHT))
+            .map_err(|e| e.to_string())?;
+
+        // Draw single separating lines
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas
+            .draw_line(
+                (HEADER_SIZE as i32, HEADER_SIZE as i32),
+                (WINDOW_WIDTH as i32, HEADER_SIZE as i32),
+            )
+            .map_err(|e| e.to_string())?;
+        canvas
+            .draw_line(
+                (HEADER_SIZE as i32, HEADER_SIZE as i32),
+                (HEADER_SIZE as i32, WINDOW_HEIGHT as i32),
+            )
+            .map_err(|e| e.to_string())?;
+
+        // Top header row.
+        for col in 0..ZERO_PAGE_SIDE {
+            let x = (HEADER_SIZE + col as u32 * CELL_SCALE) as i32;
+            let y = 0i32;
+
+            let texture = self.header_textures.top(col as u8);
+            let target = Rect::new(
+                x + CELL_PADDING as i32,
+                y + CELL_PADDING as i32,
+                (CELL_SCALE - CELL_PADDING * 2) as u32,
+                (CELL_SCALE - CELL_PADDING * 2) as u32,
+            );
+            canvas.copy(texture, None, Some(target))?;
+        }
+
+        // Left header column.
+        for row in 0..ZERO_PAGE_SIDE {
+            let x = 0i32;
+            let y = (HEADER_SIZE + row as u32 * CELL_SCALE) as i32;
+
+            let texture = self.header_textures.side(row as u8);
+            let target = Rect::new(
+                x + CELL_PADDING as i32,
+                y + CELL_PADDING as i32,
+                (CELL_SCALE - CELL_PADDING * 2) as u32,
+                (CELL_SCALE - CELL_PADDING * 2) as u32,
+            );
+            canvas.copy(texture, None, Some(target))?;
         }
 
         Ok(())
@@ -181,5 +247,61 @@ impl HexTextures {
         self.textures
             .get(&value)
             .expect("Unable to get a texture from its byte value")
+    }
+}
+
+/// Contains the textures for the header.
+///   top:  x0 x1 x2 ... xf
+///   side: 0x 1x 2x ... fx
+#[derive(Default)]
+struct HeaderTextures {
+    top: Vec<Texture>,
+    side: Vec<Texture>,
+}
+
+impl HeaderTextures {
+    pub fn build_textures(
+        &mut self,
+        texture_creator: &TextureCreator<WindowContext>,
+    ) -> Result<(), String> {
+        let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
+        let font = ttf_context.load_font(
+            "assets/liberation_mono/LiberationMono-Regular.ttf",
+            FONT_SIZE,
+        )?;
+
+        for col in 0u8..ZERO_PAGE_SIDE as u8 {
+            let label = format!("x{:X}", col);
+            let surface = font
+                .render(&label)
+                .blended(Color::RGB(255, 255, 255))
+                .map_err(|e| e.to_string())?;
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .map_err(|e| e.to_string())?;
+            self.top.push(texture);
+        }
+
+        for row in 0u8..ZERO_PAGE_SIDE as u8 {
+            let label = format!("{:X}x", row);
+            let surface = font
+                .render(&label)
+                .blended(Color::RGB(255, 255, 255))
+                .map_err(|e| e.to_string())?;
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .map_err(|e| e.to_string())?;
+            self.side.push(texture);
+        }
+
+        Ok(())
+    }
+
+    pub fn top(&self, index: u8) -> &Texture {
+        &self.top[index as usize]
+    }
+
+    pub fn side(&self, index: u8) -> &Texture {
+        &self.side[index as usize]
     }
 }
