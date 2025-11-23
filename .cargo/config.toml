@@ -1,2 +1,6 @@
 [target.aarch64-apple-darwin]
 rustflags = ["-L", "/opt/homebrew/lib"]
+
+[alias]
+run-frontend = "run -p task -- run-frontend"
+run-frontend-release = "run -p task -- run-frontend --release"

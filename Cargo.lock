@@ -1375,6 +1375,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "task"
+version = "0.1.0"
+
+[[package]]
 name = "terminal_size"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
