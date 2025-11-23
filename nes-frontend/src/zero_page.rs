@@ -19,8 +19,10 @@ const HEADER_SIZE: u32 = CELL_SCALE;
 const FONT_SIZE: u16 = 80;
 const WINDOW_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
 const WINDOW_HEIGHT: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
-const DIM_1: f32 = 0.8;
-const DIM_2: f32 = 0.6;
+const UNSELECTED_DIM: f32 = 0.8;
+const UNSELECTED_DIM_HOVERED: f32 = 0.9;
+const DIM_1: f32 = 0.9;
+const DIM_2: f32 = 0.8;
 
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
@@ -233,7 +235,7 @@ impl ZeroPageWindow {
             canvas.copy(texture, None, Some(target))?;
 
             // Dim overlay for header cell.
-            let dim = dim_factor_top(self.hover, col as u8);
+            let dim = dim_factor_top(self.hover, self.selected, col as u8);
             if dim < 1.0 {
                 let alpha = ((1.0 - dim) * 255.0) as u8;
                 canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
@@ -258,7 +260,7 @@ impl ZeroPageWindow {
             canvas.copy(texture, None, Some(target))?;
 
             // Dim overlay for header cell.
-            let dim = dim_factor_side(self.hover, row as u8);
+            let dim = dim_factor_side(self.hover, self.selected, row as u8);
             if dim < 1.0 {
                 let alpha = ((1.0 - dim) * 255.0) as u8;
                 canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
@@ -410,28 +412,40 @@ fn dim_factor(
     row: u8,
     col: u8,
 ) -> f32 {
-    if let Some((sr, sc)) = selected {
-        if sr == row && sc == col {
-            return 1.0;
-        }
-    }
-
-    match hover {
+    let mut factor = match hover {
         None => 1.0,
-        Some((hr, hc)) => {
-            if hr == row && hc == col {
+        Some((hover_row, hover_col)) => {
+            if hover_row == row && hover_col == col {
+                // This cell is hovered.
                 1.0
-            } else if hr == row || hc == col {
+            } else if hover_row == row || hover_col == col {
+                // This cell is in a row or column.
                 DIM_1
             } else {
+                // This cell is dimmed.
                 DIM_2
             }
         }
+    };
+
+    if let Some((selected_row, selected_col)) = selected {
+        if selected_row == row && selected_col == col {
+            return 1.0;
+        }
+
+        // Slightly dim all other cells when a selection is present.
+        if hover.is_some() {
+            factor *= UNSELECTED_DIM_HOVERED;
+        } else {
+            factor *= UNSELECTED_DIM;
+        }
     }
+
+    factor
 }
 
-fn dim_factor_top(hover: Option<(u8, u8)>, col: u8) -> f32 {
-    match hover {
+fn dim_factor_top(hover: Option<(u8, u8)>, selected: Option<(u8, u8)>, col: u8) -> f32 {
+    let mut factor = match hover {
         None => 1.0,
         Some((_, hc)) => {
             if hc == col {
@@ -440,11 +454,20 @@ fn dim_factor_top(hover: Option<(u8, u8)>, col: u8) -> f32 {
                 DIM_2
             }
         }
+    };
+
+    if let Some((_, selected_col)) = selected {
+        if selected_col == col {
+            return 1.0;
+        }
+        factor *= UNSELECTED_DIM_HOVERED;
     }
+
+    factor
 }
 
-fn dim_factor_side(hover: Option<(u8, u8)>, row: u8) -> f32 {
-    match hover {
+fn dim_factor_side(hover: Option<(u8, u8)>, selected: Option<(u8, u8)>, row: u8) -> f32 {
+    let mut factor = match hover {
         None => 1.0,
         Some((hr, _)) => {
             if hr == row {
@@ -453,7 +476,16 @@ fn dim_factor_side(hover: Option<(u8, u8)>, row: u8) -> f32 {
                 DIM_2
             }
         }
+    };
+
+    if let Some((selected_row, _)) = selected {
+        if selected_row == row {
+            return 1.0;
+        }
+        factor *= UNSELECTED_DIM_HOVERED;
     }
+
+    factor
 }
 
 fn apply_dim(color: &mut Color, factor: f32) {
