@@ -4,7 +4,7 @@ use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
-use sdl2::{event::Event, render::BlendMode};
+use sdl2::{event::Event, mouse::MouseButton, render::BlendMode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -30,7 +30,8 @@ pub struct ZeroPageWindow {
     hex_textures: HexTextures,
     header_textures: HeaderTextures,
     texture_creator: TextureCreator<WindowContext>,
-    hover: Option<(u8, u8)>, // (row, col)
+    hover: Option<(u8, u8)>,    // (row, col)
+    selected: Option<(u8, u8)>, // (row, col)
     window_id: u32,
 }
 
@@ -69,6 +70,7 @@ impl ZeroPageWindow {
             hex_textures: Default::default(),
             header_textures: Default::default(),
             hover: None,
+            selected: None,
             window_id,
         };
 
@@ -78,36 +80,37 @@ impl ZeroPageWindow {
         Ok(view)
     }
 
-    /// Handle mouse motion to track hovered cell.
+    /// Handle events from the global event_pump.
     pub fn handle_event(&mut self, event: &Event) {
-        if let Event::MouseMotion {
-            x, y, window_id, ..
-        } = event
-        {
-            if *window_id != self.window_id {
-                return;
+        match event {
+            Event::MouseMotion {
+                x, y, window_id, ..
+            } => {
+                if *window_id != self.window_id {
+                    return;
+                }
+                self.hover = cell_from_point(*x, *y);
             }
-
-            let x = *x;
-            let y = *y;
-
-            // Translate from screen to grid (subtract header).
-            let grid_x = x - HEADER_SIZE as i32;
-            let grid_y = y - HEADER_SIZE as i32;
-
-            if grid_x < 0 || grid_y < 0 {
-                self.hover = None;
-                return;
+            Event::MouseButtonDown {
+                x,
+                y,
+                window_id,
+                mouse_btn,
+                ..
+            } if *mouse_btn == MouseButton::Left => {
+                if *window_id != self.window_id {
+                    return;
+                }
+                if let Some((row, col)) = cell_from_point(*x, *y) {
+                    self.selected = Some((row, col));
+                    let addr = row as u16 * ZERO_PAGE_SIDE as u16 + col as u16;
+                    println!(
+                        "Selected zero page cell {:02X} (row {}, col {})",
+                        addr, row, col
+                    );
+                }
             }
-
-            let col = (grid_x as u32) / CELL_SCALE;
-            let row = (grid_y as u32) / CELL_SCALE;
-
-            if col < ZERO_PAGE_SIDE as u32 && row < ZERO_PAGE_SIDE as u32 {
-                self.hover = Some((row as u8, col as u8));
-            } else {
-                self.hover = None;
-            }
+            _ => {}
         }
     }
 
@@ -427,4 +430,23 @@ fn dim_factor_side(hover: Option<(u8, u8)>, row: u8) -> f32 {
 fn apply_dim(color: &mut Color, factor: f32) {
     let scale = |v: u8| ((v as f32 * factor).round().clamp(0.0, 255.0)) as u8;
     *color = Color::RGB(scale(color.r), scale(color.g), scale(color.b));
+}
+
+fn cell_from_point(x: i32, y: i32) -> Option<(u8, u8)> {
+    // Translate from screen to grid.
+    let grid_x = x - HEADER_SIZE as i32;
+    let grid_y = y - HEADER_SIZE as i32;
+
+    if grid_x < 0 || grid_y < 0 {
+        return None;
+    }
+
+    let col = (grid_x as u32) / CELL_SCALE;
+    let row = (grid_y as u32) / CELL_SCALE;
+
+    if col < ZERO_PAGE_SIDE as u32 && row < ZERO_PAGE_SIDE as u32 {
+        Some((row as u8, col as u8))
+    } else {
+        None
+    }
 }
