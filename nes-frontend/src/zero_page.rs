@@ -292,6 +292,9 @@ impl ZeroPageWindow {
             Keycode::Down => self.change_selection(1, 0),
             Keycode::Left => self.change_selection(0, -1),
             Keycode::Right => self.change_selection(0, 1),
+            Keycode::Escape => {
+                self.selected = None;
+            }
             _ => return,
         }
     }
