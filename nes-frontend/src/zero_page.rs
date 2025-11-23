@@ -43,6 +43,7 @@ pub struct ZeroPageWindow {
     egui_ctx: egui::Context,
     egui_events: Vec<EguiEvent>,
     sidebar_text: String,
+    sidebar_focused: bool,
     egui_wants_keyboard: bool,
     egui_wants_pointer: bool,
     egui_modifiers: EguiModifiers,
@@ -88,6 +89,7 @@ impl ZeroPageWindow {
             egui_ctx: egui::Context::default(),
             egui_events: Vec::new(),
             sidebar_text: String::new(),
+            sidebar_focused: false,
             egui_wants_keyboard: false,
             egui_wants_pointer: false,
             egui_modifiers: EguiModifiers::default(),
@@ -392,6 +394,7 @@ impl ZeroPageWindow {
 
         let egui_ctx = self.egui_ctx.clone();
         let sidebar_text = &mut self.sidebar_text;
+        let sidebar_focused = &mut self.sidebar_focused;
 
         let _ = egui_ctx.run(raw_input, |ctx| {
             egui::Area::new("sidebar")
@@ -408,6 +411,7 @@ impl ZeroPageWindow {
                     if response.has_focus() {
                         ui.ctx().request_repaint();
                     }
+                    *sidebar_focused = response.has_focus();
                 });
         });
 
@@ -447,7 +451,12 @@ impl ZeroPageWindow {
 
         canvas.set_draw_color(Color::RGB(40, 40, 40));
         canvas.fill_rect(textbox_rect)?;
-        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        let border_color = if self.sidebar_focused {
+            Color::RGB(255, 255, 255)
+        } else {
+            Color::RGB(140, 140, 140)
+        };
+        canvas.set_draw_color(border_color);
         canvas.draw_rect(textbox_rect)?;
 
         if !self.sidebar_text.is_empty() {
