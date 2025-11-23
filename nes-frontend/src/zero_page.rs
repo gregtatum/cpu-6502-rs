@@ -18,7 +18,9 @@ const CELL_SCALE: u32 = 30;
 const CELL_PADDING: u32 = 5;
 const HEADER_SIZE: u32 = CELL_SCALE;
 const FONT_SIZE: u16 = 80;
-const WINDOW_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
+const GRID_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
+const SIDEBAR_WIDTH: u32 = 200;
+const WINDOW_WIDTH: u32 = GRID_WIDTH + SIDEBAR_WIDTH;
 const WINDOW_HEIGHT: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
 const UNSELECTED_DIM: f32 = 0.8;
 const UNSELECTED_DIM_HOVERED: f32 = 0.9;
@@ -131,6 +133,7 @@ impl ZeroPageWindow {
     pub fn draw(&mut self, bus: &Bus) -> Result<(), String> {
         self.draw_memory_cells(&bus)?;
         self.draw_headers()?;
+        self.draw_sidebar()?;
         self.canvas.borrow_mut().present();
         Ok(())
     }
@@ -200,7 +203,7 @@ impl ZeroPageWindow {
         // Fill header backgrounds.
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas
-            .fill_rect(Rect::new(0, 0, WINDOW_WIDTH, HEADER_SIZE))
+            .fill_rect(Rect::new(0, 0, GRID_WIDTH, HEADER_SIZE))
             .map_err(|e| e.to_string())?;
         canvas
             .fill_rect(Rect::new(0, 0, HEADER_SIZE, WINDOW_HEIGHT))
@@ -211,7 +214,7 @@ impl ZeroPageWindow {
         canvas
             .draw_line(
                 (HEADER_SIZE as i32, HEADER_SIZE as i32),
-                (WINDOW_WIDTH as i32, HEADER_SIZE as i32),
+                (GRID_WIDTH as i32, HEADER_SIZE as i32),
             )
             .map_err(|e| e.to_string())?;
         canvas
@@ -270,6 +273,32 @@ impl ZeroPageWindow {
                     .map_err(|e| e.to_string())?;
             }
         }
+
+        Ok(())
+    }
+
+    fn draw_sidebar(&mut self) -> Result<(), String> {
+        let mut canvas = self.canvas.borrow_mut();
+
+        // Sidebar background.
+        canvas.set_draw_color(Color::RGB(24, 24, 24));
+        canvas
+            .fill_rect(Rect::new(
+                GRID_WIDTH as i32,
+                0,
+                SIDEBAR_WIDTH,
+                WINDOW_HEIGHT,
+            ))
+            .map_err(|e| e.to_string())?;
+
+        // Separator line between grid and sidebar.
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas
+            .draw_line(
+                (GRID_WIDTH as i32, 0),
+                (GRID_WIDTH as i32, WINDOW_HEIGHT as i32),
+            )
+            .map_err(|e| e.to_string())?;
 
         Ok(())
     }
