@@ -275,6 +275,9 @@ impl ZeroPageWindow {
     }
 
     fn select_cell(&mut self, row: u8, col: u8) {
+        if self.selected == Some((row, col)) {
+            return;
+        }
         self.selected = Some((row, col));
         let addr = row as u16 * ZERO_PAGE_SIDE as u16 + col as u16;
         println!(
