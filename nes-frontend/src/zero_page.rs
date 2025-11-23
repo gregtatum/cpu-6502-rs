@@ -4,7 +4,11 @@ use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
-use sdl2::{event::Event, mouse::MouseButton, render::BlendMode};
+use sdl2::{
+    event::{Event, WindowEvent},
+    mouse::MouseButton,
+    render::BlendMode,
+};
 use std::cell::RefCell;
 
 const ZERO_PAGE_SIDE: u16 = 16;
@@ -108,6 +112,13 @@ impl ZeroPageWindow {
                         addr, row, col
                     );
                 }
+            }
+            Event::Window {
+                win_event: WindowEvent::Leave,
+                window_id,
+                ..
+            } if *window_id == self.window_id => {
+                self.hover = None;
             }
             _ => {}
         }
