@@ -119,10 +119,8 @@ impl ZeroPageWindow {
                 self.hover = None;
             }
             Event::KeyDown {
-                keycode: Some(key),
-                repeat,
-                ..
-            } if !repeat => {
+                keycode: Some(key), ..
+            } => {
                 self.handle_key(*key);
             }
             _ => {}
