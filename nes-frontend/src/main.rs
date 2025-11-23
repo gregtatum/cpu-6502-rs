@@ -197,12 +197,19 @@ fn ensure_assets_workdir() -> Result<(), String> {
     // When launched via .app, the cwd is inside Contents/MacOS; walk ancestors to find the repo root.
     let exe = env::current_exe().map_err(|e| e.to_string())?;
     for ancestor in exe.ancestors() {
-        let candidate =
-            ancestor.join("assets/liberation_mono/LiberationMono-Regular.ttf");
-        if candidate.exists() {
-            let dir = ancestor.parent().unwrap_or(ancestor);
-            env::set_current_dir(dir).map_err(|e| e.to_string())?;
-            return Ok(());
+        let bases = [
+            ancestor.join("assets"),
+            ancestor.join("Resources/assets"),
+        ];
+        for base in bases {
+            let candidate = base.join("liberation_mono/LiberationMono-Regular.ttf");
+            if candidate.exists() {
+                let dir = base
+                    .parent()
+                    .ok_or("failed to find parent for assets directory")?;
+                env::set_current_dir(dir).map_err(|e| e.to_string())?;
+                return Ok(());
+            }
         }
     }
     Err("assets directory not found in executable ancestors".into())

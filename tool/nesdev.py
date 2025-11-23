@@ -4,7 +4,7 @@ Utility CLI for pulling down NESDev wiki content as local references.
 
 The streamlined workflow is:
   * search for relevant pages
-  * save the wikitext (with local metadata) to assets/nesdev
+  * save the wikitext (with local metadata) to notes/nesdev
   * optionally use "grab" to search and save in one step
 
 Results are cached on disk so repeated queries are fast/offline-friendly.
