@@ -10,15 +10,15 @@ use sdl2::{
     Sdl,
 };
 
-pub struct ScreenBuffer<'a> {
+pub struct ScreenBuffer {
     pub texture_data: Vec<u8>,
-    pub texture: Texture<'a>,
+    pub texture: Texture,
     pub texture_row_size: usize,
     pub mem_offset: (u16, u16),
 }
 
-impl<'a> ScreenBuffer<'a> {
-    pub fn new(system: &'a System, mem_offset: (u16, u16)) -> ScreenBuffer<'a> {
+impl<'a> ScreenBuffer {
+    pub fn new(system: &'a System, mem_offset: (u16, u16)) -> ScreenBuffer {
         let texture = system
             .texture_creator
             .create_texture_target(
@@ -128,7 +128,7 @@ impl System {
 pub struct SimpleGame<'a> {
     pub cpu: Cpu6502,
     pub system: &'a System,
-    pub screen: ScreenBuffer<'a>,
+    pub screen: ScreenBuffer,
 }
 
 impl<'a> SimpleGame<'a> {
