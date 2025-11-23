@@ -1,7 +1,7 @@
 /target
-assets/private
-assets/nesdev
-assets/nesdev_cache
+notes/private
+notes/nesdev
+notes/nesdev_cache
 error.log
 
 /log.txt

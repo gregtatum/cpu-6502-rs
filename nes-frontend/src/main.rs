@@ -12,6 +12,7 @@ use nes_core::{
 };
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
+use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -174,6 +175,10 @@ fn create_demo_core() -> NesCore {
 }
 
 fn main() {
+    if let Err(err) = ensure_assets_workdir() {
+        eprintln!("Warning: could not set working dir to assets root: {err}");
+    }
+
     match NesFrontend::new() {
         Ok(mut system) => {
             if let Err(message) = system.run() {
@@ -186,4 +191,19 @@ fn main() {
             eprintln!("Failed to start the system: {message}");
         }
     }
+}
+
+fn ensure_assets_workdir() -> Result<(), String> {
+    // When launched via .app, the cwd is inside Contents/MacOS; walk ancestors to find the repo root.
+    let exe = env::current_exe().map_err(|e| e.to_string())?;
+    for ancestor in exe.ancestors() {
+        let candidate =
+            ancestor.join("assets/liberation_mono/LiberationMono-Regular.ttf");
+        if candidate.exists() {
+            let dir = ancestor.parent().unwrap_or(ancestor);
+            env::set_current_dir(dir).map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+    }
+    Err("assets directory not found in executable ancestors".into())
 }
