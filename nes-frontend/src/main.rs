@@ -115,8 +115,10 @@ impl NesFrontend {
 
                 // Pass the events down to the individual components.
                 _ => {
-                    if let Some(window) = self.zero_page_window.as_mut() {
-                        window.handle_event(&event);
+                    if let Some(zero_page_window) = self.zero_page_window.as_mut() {
+                        if event.get_window_id() == Some(zero_page_window.window_id) {
+                            zero_page_window.handle_event(&event);
+                        }
                     }
                     self.controller_manager.handle_event(&event, &self.nes_core)
                 }

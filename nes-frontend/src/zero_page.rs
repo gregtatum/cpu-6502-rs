@@ -109,12 +109,7 @@ impl ZeroPageWindow {
     /// Handle events from the global event_pump.
     pub fn handle_event(&mut self, event: &Event) {
         match event {
-            Event::MouseMotion {
-                x, y, window_id, ..
-            } => {
-                if *window_id != self.window_id {
-                    return;
-                }
+            Event::MouseMotion { x, y, .. } => {
                 self.egui_events
                     .push(EguiEvent::PointerMoved(pos2(*x as f32, *y as f32)));
                 if self.egui_wants_pointer {
@@ -123,15 +118,8 @@ impl ZeroPageWindow {
                 self.hover = cell_from_point(*x, *y);
             }
             Event::MouseButtonDown {
-                x,
-                y,
-                window_id,
-                mouse_btn,
-                ..
+                x, y, mouse_btn, ..
             } if *mouse_btn == MouseButton::Left => {
-                if *window_id != self.window_id {
-                    return;
-                }
                 if *mouse_btn == MouseButton::Left {
                     self.egui_events.push(EguiEvent::PointerButton {
                         pos: pos2(*x as f32, *y as f32),
@@ -148,15 +136,8 @@ impl ZeroPageWindow {
                 }
             }
             Event::MouseButtonUp {
-                x,
-                y,
-                window_id,
-                mouse_btn,
-                ..
+                x, y, mouse_btn, ..
             } => {
-                if *window_id != self.window_id {
-                    return;
-                }
                 if *mouse_btn == MouseButton::Left {
                     self.egui_events.push(EguiEvent::PointerButton {
                         pos: pos2(*x as f32, *y as f32),
@@ -168,9 +149,8 @@ impl ZeroPageWindow {
             }
             Event::Window {
                 win_event: WindowEvent::Leave,
-                window_id,
                 ..
-            } if *window_id == self.window_id => {
+            } => {
                 self.egui_events.push(EguiEvent::PointerGone);
                 self.hover = None;
             }
@@ -197,9 +177,7 @@ impl ZeroPageWindow {
                     self.egui_events.push(event);
                 }
             }
-            Event::TextInput {
-                text, window_id, ..
-            } if *window_id == self.window_id => {
+            Event::TextInput { text, .. } => {
                 self.egui_events.push(EguiEvent::Text(text.clone()));
             }
             _ => {}
