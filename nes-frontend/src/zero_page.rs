@@ -361,12 +361,24 @@ impl ZeroPageWindow {
     }
 
     fn draw_sidebar_ui(&mut self) -> Result<(), String> {
+        let viewports = std::iter::once((
+            egui::ViewportId::ROOT,
+            egui::ViewportInfo {
+                native_pixels_per_point: Some(PIXEL_RATIO),
+                ..Default::default()
+            },
+        ))
+        .collect();
         let raw_input = egui::RawInput {
+            viewports,
             screen_rect: Some(egui::Rect::from_min_size(
                 pos2(0.0, 0.0),
-                egui::vec2(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32),
+                egui::vec2(
+                    WINDOW_WIDTH as f32 / PIXEL_RATIO,
+                    WINDOW_HEIGHT as f32 / PIXEL_RATIO,
+                ),
             )),
-            pixels_per_point: Some(PIXEL_RATIO),
+            modifiers: self.egui_modifiers,
             events: std::mem::take(&mut self.egui_events),
             ..Default::default()
         };
@@ -376,7 +388,7 @@ impl ZeroPageWindow {
         let sidebar_focused = &mut self.sidebar_focused;
 
         let _ = egui_ctx.run(raw_input, |ctx| {
-            egui::Area::new("sidebar")
+            egui::Area::new("sidebar".into())
                 .fixed_pos(pos2(GRID_WIDTH as f32, 0.0))
                 .show(ctx, |ui| {
                     ui.set_width(SIDEBAR_WIDTH as f32);
@@ -791,6 +803,8 @@ fn to_egui_key_event(
     Some(EguiEvent::Key {
         key,
         pressed,
+        physical_key: None,
+        repeat: false,
         modifiers,
     })
 }

@@ -20,9 +20,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
 
-/// Convert SDL scroll ticks to egui logical pixels.
-const SDL_TO_EGUI_SCROLL_FACTOR: f32 = 8.0;
-
 /// The front-end for the NES core, powered by SLD2.
 struct NesFrontend {
     nes_core: NesCore,
@@ -276,7 +273,6 @@ fn main() {
 struct Widgets {
     ctx: egui::Context,
     painter: egui_glow::Painter,
-    state: egui::FullOutput,
     /// Integrate the SDL2 environment to the egui RawInput on every tick.
     input: egui::RawInput,
 }
@@ -303,7 +299,6 @@ impl Widgets {
                 dithering,
             )
             .map_err(|err| err.to_string())?,
-            state: egui::FullOutput::default(),
             input: Default::default(),
         })
     }
@@ -341,6 +336,8 @@ impl Widgets {
                     pos: egui::pos2(x as f32, y as f32),
                     button,
                     pressed: true,
+                    // TODO - The modifiers aren't on this event and need to be tracked
+                    // separately
                     modifiers: egui::Modifiers::default(),
                 })
             }
@@ -351,13 +348,18 @@ impl Widgets {
                     pos: egui::pos2(x as f32, y as f32),
                     button,
                     pressed: false,
+                    // TODO - The modifiers aren't on this event and need to be tracked
+                    // separately
                     modifiers: egui::Modifiers::default(),
                 })
             }
-            Event::MouseWheel { y, .. } => Some(egui::Event::Scroll(egui::vec2(
-                0.0,
-                y as f32 * SDL_TO_EGUI_SCROLL_FACTOR,
-            ))),
+            Event::MouseWheel { x, y, .. } => Some(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(x as f32, y as f32),
+                // TODO - The modifiers aren't on this event and need to be tracked
+                // separately
+                modifiers: Default::default(),
+            }),
             Event::TextInput { ref text, .. } => Some(egui::Event::Text(text.clone())),
             // KeyDown/Up -> egui::Event::Key, if you want full keyboard support
             _ => None,
@@ -365,13 +367,24 @@ impl Widgets {
     }
 
     fn update(&mut self, window: &Window, frame_timer: &FrameTimer) -> FullOutput {
-        let (width, height) = window.drawable_size();
+        let (draw_width, _draw_height) = window.drawable_size();
+        let (logical_width, logical_height) = window.size();
+        let pixels_per_point = draw_width as f32 / logical_width.max(1) as f32;
+
         self.input.time = Some(frame_timer.elapsed_secs());
         self.input.screen_rect = Some(egui::Rect::from_min_size(
             egui::Pos2::ZERO,
-            egui::vec2(width as f32, height as f32),
+            egui::vec2(logical_width as f32, logical_height as f32),
         ));
-        self.input.pixels_per_point = Some(1.0); // or detect HiDPI
+
+        // TODO - Why do this?
+        let mut viewports = std::mem::take(&mut self.input.viewports);
+        let mut root_info = viewports
+            .remove(&egui::ViewportId::ROOT)
+            .unwrap_or_default();
+        root_info.native_pixels_per_point = Some(pixels_per_point);
+        viewports.insert(egui::ViewportId::ROOT, root_info);
+        self.input.viewports = viewports;
 
         // Take the input, which resets the raw input back to its default for
         // the next frame.
@@ -391,8 +404,10 @@ impl Widgets {
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
         }
 
-        let clipped_primitives = self.ctx.tessellate(full_output.shapes);
-        let textures_delta = full_output.textures_delta;
+        let clipped_primitives = self
+            .ctx
+            .tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
+        let textures_delta = full_output.textures_delta.clone();
         let (width, height) = window.drawable_size();
 
         self.painter.paint_and_update_textures(
