@@ -19,7 +19,7 @@ const ZERO_PAGE_BYTES: u16 = ZERO_PAGE_SIDE * ZERO_PAGE_SIDE;
 const CELL_SCALE: u32 = 30;
 const CELL_PADDING: u32 = 5;
 const HEADER_SIZE: u32 = CELL_SCALE;
-const FONT_SIZE: u16 = 80;
+const HEX_FONT_SIZE: u16 = 80;
 const GRID_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
 const SIDEBAR_WIDTH: u32 = 200;
 const WINDOW_WIDTH: u32 = GRID_WIDTH + SIDEBAR_WIDTH;
@@ -28,6 +28,7 @@ const UNSELECTED_DIM: f32 = 0.8;
 const UNSELECTED_DIM_HOVERED: f32 = 0.9;
 const DIM_1: f32 = 0.9;
 const DIM_2: f32 = 0.8;
+const PIXEL_RATIO: f32 = 2.0;
 
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
@@ -387,7 +388,7 @@ impl ZeroPageWindow {
                 pos2(0.0, 0.0),
                 egui::vec2(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32),
             )),
-            pixels_per_point: Some(1.0),
+            pixels_per_point: Some(PIXEL_RATIO),
             events: std::mem::take(&mut self.egui_events),
             ..Default::default()
         };
@@ -423,22 +424,23 @@ impl ZeroPageWindow {
     }
 
     fn draw_sidebar_textbox(&mut self) -> Result<(), String> {
-        let padding = 12;
-        let text_padding = 8;
+        let padding = 10;
+        let text_padding = 6;
         let heading_y = 12;
-        let textbox_height = 36;
+        let textbox_height = 28;
 
         let Some(label_texture) =
-            self.render_text_texture("Notes", 24, Color::RGB(230, 230, 230))?
+            self.render_text_texture("Notes", 18, Color::RGB(230, 230, 230))?
         else {
             return Ok(());
         };
         let label_query = label_texture.query();
 
         let x = GRID_WIDTH as i32 + padding;
-        let label_rect = Rect::new(x, heading_y, label_query.width, label_query.height);
+        let (label_w, label_h) = self.logical_texture_size(&label_query);
+        let label_rect = Rect::new(x, heading_y, label_w, label_h);
 
-        let textbox_y = heading_y + label_query.height as i32 + 8;
+        let textbox_y = heading_y + label_h as i32 + 8;
         let textbox_rect = Rect::new(
             x,
             textbox_y,
@@ -462,15 +464,16 @@ impl ZeroPageWindow {
         if !self.sidebar_text.is_empty() {
             if let Some(text_texture) = self.render_text_texture(
                 &self.sidebar_text,
-                22,
+                18,
                 Color::RGB(230, 230, 230),
             )? {
                 let query = text_texture.query();
+                let (text_w, text_h) = self.logical_texture_size(&query);
                 let text_rect = Rect::new(
                     x + text_padding,
-                    textbox_y + (textbox_height as i32 - query.height as i32) / 2,
-                    query.width,
-                    query.height,
+                    textbox_y + (textbox_height as i32 - text_h as i32) / 2,
+                    text_w,
+                    text_h,
                 );
                 canvas.copy(&text_texture, None, Some(text_rect))?;
             }
@@ -489,6 +492,7 @@ impl ZeroPageWindow {
             return Ok(None);
         }
 
+        let size = (size as f32 * PIXEL_RATIO).round().max(1.0) as u16;
         let ttf_context = ttf::init().map_err(|e| e.to_string())?;
         let font = ttf_context
             .load_font("assets/liberation_mono/LiberationMono-Regular.ttf", size)
@@ -503,6 +507,13 @@ impl ZeroPageWindow {
             .create_texture_from_surface(&surface)
             .map_err(|e| e.to_string())?;
         Ok(Some(texture))
+    }
+
+    fn logical_texture_size(&self, query: &sdl2::render::TextureQuery) -> (u32, u32) {
+        (
+            (query.width as f32 / PIXEL_RATIO).round().max(1.0) as u32,
+            (query.height as f32 / PIXEL_RATIO).round().max(1.0) as u32,
+        )
     }
 
     fn select_cell(&mut self, row: u8, col: u8) {
@@ -595,7 +606,7 @@ impl HexTextures {
         let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
         let font = ttf_context.load_font(
             "assets/liberation_mono/LiberationMono-Regular.ttf",
-            FONT_SIZE,
+            HEX_FONT_SIZE,
         )?;
 
         for value in 0u8..=255u8 {
@@ -635,7 +646,7 @@ impl HeaderTextures {
         let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
         let font = ttf_context.load_font(
             "assets/liberation_mono/LiberationMono-Regular.ttf",
-            FONT_SIZE,
+            HEX_FONT_SIZE,
         )?;
 
         for col in 0u8..ZERO_PAGE_SIDE as u8 {
