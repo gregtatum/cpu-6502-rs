@@ -87,9 +87,6 @@ impl NesFrontend {
         }
 
         let sdl_gl = window.gl_create_context()?;
-        // TODO - Remove me, creating the context makes it current, so this is probably
-        // redundant.
-        window.gl_make_current(&sdl_gl)?;
 
         // 0 for immediate updates
         // 1 for updates synchronized with the vertical retrace
