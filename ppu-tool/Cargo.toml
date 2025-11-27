@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 macroquad = { workspace = true }
 miniquad = { workspace = true }
-egui = { workspace = true }
+egui = "0.20"
 structopt = { workspace = true }
 native-dialog = { workspace = true }
 dispatch = { workspace = true }

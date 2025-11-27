@@ -13,7 +13,7 @@ members = [
 [workspace.dependencies]
 colored = "2.0"
 dispatch = "0.2"
-egui = "0.20"
+egui = "0.33"
 egui_glow = "0.33"
 egui-miniquad = "0.13"
 glow = "0.16.0"

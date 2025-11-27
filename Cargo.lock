@@ -641,11 +641,18 @@ dependencies = [
  "bytemuck",
  "ecolor 0.33.2",
  "emath 0.33.2",
+ "epaint_default_fonts",
  "log",
  "nohash-hasher",
  "parking_lot 0.12.5",
  "profiling",
 ]
+
+[[package]]
+name = "epaint_default_fonts"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad9649446c23368ae138716910e3e28143995691b598fbb9de16b42b0722cbcc"
 
 [[package]]
 name = "flate2"
@@ -1019,7 +1026,7 @@ dependencies = [
 name = "nes-frontend"
 version = "0.1.0"
 dependencies = [
- "egui 0.20.1",
+ "egui 0.33.2",
  "egui_glow",
  "glow",
  "nes-core",
