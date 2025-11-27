@@ -377,14 +377,12 @@ impl Widgets {
             egui::vec2(logical_width as f32, logical_height as f32),
         ));
 
-        // TODO - Why do this?
-        let mut viewports = std::mem::take(&mut self.input.viewports);
-        let mut root_info = viewports
-            .remove(&egui::ViewportId::ROOT)
-            .unwrap_or_default();
-        root_info.native_pixels_per_point = Some(pixels_per_point);
-        viewports.insert(egui::ViewportId::ROOT, root_info);
-        self.input.viewports = viewports;
+        // Sync the pixel_per_point.
+        if let Some(ref mut root_viewport) =
+            self.input.viewports.get_mut(&egui::ViewportId::ROOT)
+        {
+            root_viewport.native_pixels_per_point = Some(pixels_per_point);
+        }
 
         // Take the input, which resets the raw input back to its default for
         // the next frame.
