@@ -27,6 +27,8 @@ struct NesFrontend {
     controller_manager: ControllerManager,
     widgets: Widgets,
     gl: Arc<glow::Context>,
+    #[expect(dead_code, reason = "RAII Handle")]
+    gl_context: sdl2::video::GLContext,
     zero_page_window: Option<ZeroPageWindow>,
     window: Window,
     frame_timer: FrameTimer,
@@ -38,7 +40,7 @@ impl NesFrontend {
 
         let video = sdl.video()?;
         let window = NesFrontend::setup_window(&video)?;
-        let gl = NesFrontend::setup_gl(&video, &window)?;
+        let (gl, gl_context) = NesFrontend::setup_gl(&video, &window)?;
 
         Ok(Self {
             nes_core: create_demo_core(),
@@ -47,6 +49,7 @@ impl NesFrontend {
             controller_manager: ControllerManager::new(&sdl)?,
             widgets: Widgets::new(gl.clone())?,
             gl,
+            gl_context,
             // Disable for now:
             zero_page_window: None, // Some(ZeroPageWindow::new(&sdl)?)
             frame_timer: FrameTimer::new(),
@@ -68,7 +71,7 @@ impl NesFrontend {
     fn setup_gl(
         video: &VideoSubsystem,
         window: &Window,
-    ) -> Result<Arc<glow::Context>, String> {
+    ) -> Result<(Arc<glow::Context>, sdl2::video::GLContext), String> {
         {
             // Set up OpenGL attributes
             let gl_attr = video.gl_attr();
@@ -100,7 +103,7 @@ impl NesFrontend {
                 video.gl_get_proc_address(loader_fn_name) as *const _
             })
         };
-        Ok(Arc::new(gl))
+        Ok((Arc::new(gl), sdl_gl))
     }
 
     /// Run the frontend by:
@@ -135,7 +138,7 @@ impl NesFrontend {
             let full_output = self.widgets.update(&self.window, &self.frame_timer);
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
-            let elapsed = self.frame_timer.elapsed_secs();
+            let elapsed = self.frame_timer.frame_secs();
             if elapsed < TARGET_FRAME_TIME {
                 thread::sleep(Duration::from_secs_f64(TARGET_FRAME_TIME - elapsed));
             }
@@ -371,7 +374,7 @@ impl Widgets {
         let (logical_width, logical_height) = window.size();
         let pixels_per_point = draw_width as f32 / logical_width.max(1) as f32;
 
-        self.input.time = Some(frame_timer.elapsed_secs());
+        self.input.time = Some(frame_timer.secs_from_start());
         self.input.screen_rect = Some(egui::Rect::from_min_size(
             egui::Pos2::ZERO,
             egui::vec2(logical_width as f32, logical_height as f32),
@@ -449,11 +452,13 @@ fn ensure_assets_workdir() -> Result<(), String> {
 struct FrameTimer {
     last: Option<Instant>,
     now: Option<Instant>,
+    start: Instant,
 }
 
 impl FrameTimer {
     fn new() -> Self {
         Self {
+            start: Instant::now(),
             last: None,
             now: None,
         }
@@ -464,7 +469,14 @@ impl FrameTimer {
         self.now = Some(Instant::now());
     }
 
-    fn elapsed_secs(&self) -> f64 {
+    fn secs_from_start(&self) -> f64 {
+        if let Some(now) = self.now {
+            return (now - self.start).as_secs_f64();
+        }
+        return 0.0;
+    }
+
+    fn frame_secs(&self) -> f64 {
         (if let (Some(now), Some(last)) = (self.now, self.last) {
             now - last
         } else {
