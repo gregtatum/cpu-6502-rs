@@ -3,6 +3,8 @@ pub mod zero_page;
 
 use crate::drivers::controller_sdl2::ControllerManager;
 use crate::zero_page::ZeroPageWindow;
+use egui::FullOutput;
+use glow::HasContext;
 use nes_core::{
     asm::{AsmLexer, BytesLabels},
     cpu_6502::ExitReason,
@@ -10,44 +12,110 @@ use nes_core::{
     nes_core::NesCore,
     opcodes::OpCode,
 };
-use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
-use std::env;
+use sdl2::video::GLProfile;
+use sdl2::video::Window;
+use sdl2::{event::Event, VideoSubsystem};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::{env, sync::Arc};
+
+/// Convert SDL scroll ticks to egui logical pixels.
+const SDL_TO_EGUI_SCROLL_FACTOR: f32 = 8.0;
 
 /// The front-end for the NES core, powered by SLD2.
 struct NesFrontend {
+    nes_core: NesCore,
     event_pump: sdl2::EventPump,
     controller_manager: ControllerManager,
-    nes_core: NesCore,
+    widgets: Widgets,
+    gl: Arc<glow::Context>,
     zero_page_window: Option<ZeroPageWindow>,
+    window: Window,
+    frame_timer: FrameTimer,
 }
 
 impl NesFrontend {
     pub fn new() -> Result<Self, String> {
         let sdl = sdl2::init()?;
 
-        let nes_core = create_demo_core();
+        let video = sdl.video()?;
+        let window = NesFrontend::setup_window(&video)?;
+        let gl = NesFrontend::setup_gl(&video, &window)?;
 
         Ok(Self {
-            nes_core,
+            nes_core: create_demo_core(),
+            window,
             event_pump: sdl.event_pump()?,
             controller_manager: ControllerManager::new(&sdl)?,
-            zero_page_window: Some(ZeroPageWindow::new(&sdl)?),
+            widgets: Widgets::new(gl.clone())?,
+            gl,
+            // Disable for now:
+            zero_page_window: None, // Some(ZeroPageWindow::new(&sdl)?)
+            frame_timer: FrameTimer::new(),
         })
     }
 
-    /// Run the program by:
+    /// Create a main window where all of the egui widgets live.
+    fn setup_window(video: &VideoSubsystem) -> Result<Window, String> {
+        video
+            .window("NES Emulator", 1280, 720)
+            .opengl()
+            .resizable()
+            .position_centered()
+            .build()
+            .map_err(|err| err.to_string())
+    }
+
+    ///
+    fn setup_gl(
+        video: &VideoSubsystem,
+        window: &Window,
+    ) -> Result<Arc<glow::Context>, String> {
+        {
+            // Set up OpenGL attributes
+            let gl_attr = video.gl_attr();
+            // Don't use deprecated OpenGL functions.
+            gl_attr.set_context_profile(GLProfile::Core);
+            // The sdl2 examples use version 3.x, but 4.x is also available.
+            gl_attr.set_context_version(3, 3);
+            // Enable anti-aliasing.
+            gl_attr.set_multisample_buffers(1);
+            gl_attr.set_multisample_samples(4);
+
+            gl_attr.set_double_buffer(true);
+        }
+
+        let sdl_gl = window.gl_create_context()?;
+        // TODO - Remove me, creating the context makes it current, so this is probably
+        // redundant.
+        window.gl_make_current(&sdl_gl)?;
+
+        // 0 for immediate updates
+        // 1 for updates synchronized with the vertical retrace
+        // -1 for adaptive vsync
+        video.gl_set_swap_interval(1)?;
+
+        // Convert the SDL2 gl context into a glow (GL on Whatever) so that we
+        // can safely use a GL context on "whatever".
+        let gl = unsafe {
+            glow::Context::from_loader_function(|loader_fn_name: &str| {
+                video.gl_get_proc_address(loader_fn_name) as *const _
+            })
+        };
+        Ok(Arc::new(gl))
+    }
+
+    /// Run the frontend by:
     ///
     ///   1. Processing the events
     ///   2. Advancing the CPU by at most 1 frame.
     ///   3. Drawing that frame.
     ///   4. Sleeping to keep an ~60Hz cadence.
     fn run(&mut self) -> Result<(), String> {
-        const TARGET_FRAME_TIME: Duration = Duration::from_nanos(16_666_667);
+        const TARGET_FRAME_TIME: f64 = Duration::from_nanos(16_666_667).as_secs_f64();
         loop {
-            let frame_start = Instant::now();
+            self.frame_timer.update();
 
             if self.process_events()? {
                 break;
@@ -64,9 +132,15 @@ impl NesFrontend {
                 window.draw(&bus)?;
             }
 
-            let elapsed = frame_start.elapsed();
+            // What other integrations from SDL2 to egui do we want to support?
+            // Clipboard, others?
+
+            let full_output = self.widgets.update(&self.window, &self.frame_timer);
+            self.widgets.draw(&self.gl, &full_output, &self.window);
+
+            let elapsed = self.frame_timer.elapsed_secs();
             if elapsed < TARGET_FRAME_TIME {
-                thread::sleep(TARGET_FRAME_TIME - elapsed);
+                thread::sleep(Duration::from_secs_f64(TARGET_FRAME_TIME - elapsed));
             }
         }
 
@@ -115,6 +189,8 @@ impl NesFrontend {
 
                 // Pass the events down to the individual components.
                 _ => {
+                    self.widgets.add_event(&event);
+
                     if let Some(zero_page_window) = self.zero_page_window.as_mut() {
                         if event.get_window_id() == Some(zero_page_window.window_id) {
                             zero_page_window.handle_event(&event);
@@ -182,8 +258,8 @@ fn main() {
     }
 
     match NesFrontend::new() {
-        Ok(mut system) => {
-            if let Err(message) = system.run() {
+        Ok(mut frontend) => {
+            if let Err(message) = frontend.run() {
                 eprintln!("Front-end error: {message}");
             } else {
                 println!("Exiting gracefully");
@@ -192,6 +268,147 @@ fn main() {
         Err(message) => {
             eprintln!("Failed to start the system: {message}");
         }
+    }
+}
+
+/// Widgets are powered by egui. This struct handles the lifetimes and initialization
+/// of anything egui related.
+struct Widgets {
+    ctx: egui::Context,
+    painter: egui_glow::Painter,
+    state: egui::FullOutput,
+    /// Integrate the SDL2 environment to the egui RawInput on every tick.
+    input: egui::RawInput,
+}
+
+impl Widgets {
+    fn new(gl: Arc<glow::Context>) -> Result<Self, String> {
+        // Extra preprocessor text injected at the top of both vertex + fragment shaders.
+        let shader_prefix = "";
+
+        // Which GLSL / GLSL ES version declaration to use in the shaders. When
+        // set to none it's determined automatically for the target.
+        let shader_version = None;
+
+        // Enables a compile-time `#define DITHERING 1` in the fragment shader.
+        // You must write the dithering code yourself.
+        let dithering = false;
+
+        Ok(Widgets {
+            ctx: egui::Context::default(),
+            painter: egui_glow::Painter::new(
+                gl,
+                shader_prefix,
+                shader_version,
+                dithering,
+            )
+            .map_err(|err| err.to_string())?,
+            state: egui::FullOutput::default(),
+            input: Default::default(),
+        })
+    }
+
+    fn add_event(&mut self, event: &sdl2::event::Event) {
+        if let Some(egui_event) = Self::convert_event(event) {
+            self.input.events.push(egui_event);
+        }
+    }
+
+    /// SDL2 is our primary app interface, but egui is used for widgets. Convert SDL2
+    /// events into egui events.
+    fn convert_event(event: &sdl2::event::Event) -> Option<egui::Event> {
+        use egui::PointerButton;
+        use sdl2::event::Event;
+        use sdl2::mouse::MouseButton;
+
+        let convert_mouse_event = |mouse_button| match mouse_button {
+            MouseButton::Left => Some(PointerButton::Primary),
+            MouseButton::Right => Some(PointerButton::Secondary),
+            MouseButton::Middle => Some(PointerButton::Middle),
+            MouseButton::X1 => Some(PointerButton::Extra1),
+            MouseButton::X2 => Some(PointerButton::Extra2),
+            MouseButton::Unknown => None,
+        };
+
+        match *event {
+            Event::MouseMotion { x, y, .. } => {
+                Some(egui::Event::PointerMoved(egui::pos2(x as f32, y as f32)))
+            }
+            Event::MouseButtonDown {
+                mouse_btn, x, y, ..
+            } => {
+                convert_mouse_event(mouse_btn).map(|button| egui::Event::PointerButton {
+                    pos: egui::pos2(x as f32, y as f32),
+                    button,
+                    pressed: true,
+                    modifiers: egui::Modifiers::default(),
+                })
+            }
+            Event::MouseButtonUp {
+                mouse_btn, x, y, ..
+            } => {
+                convert_mouse_event(mouse_btn).map(|button| egui::Event::PointerButton {
+                    pos: egui::pos2(x as f32, y as f32),
+                    button,
+                    pressed: false,
+                    modifiers: egui::Modifiers::default(),
+                })
+            }
+            Event::MouseWheel { y, .. } => Some(egui::Event::Scroll(egui::vec2(
+                0.0,
+                y as f32 * SDL_TO_EGUI_SCROLL_FACTOR,
+            ))),
+            Event::TextInput { ref text, .. } => Some(egui::Event::Text(text.clone())),
+            // KeyDown/Up -> egui::Event::Key, if you want full keyboard support
+            _ => None,
+        }
+    }
+
+    fn update(&mut self, window: &Window, frame_timer: &FrameTimer) -> FullOutput {
+        let (width, height) = window.drawable_size();
+        self.input.time = Some(frame_timer.elapsed_secs());
+        self.input.screen_rect = Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(width as f32, height as f32),
+        ));
+        self.input.pixels_per_point = Some(1.0); // or detect HiDPI
+
+        // Take the input, which resets the raw input back to its default for
+        // the next frame.
+        let input = std::mem::take(&mut self.input);
+
+        self.ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.heading("Hello from egui + SDL2!");
+                ui.label("This UI is drawn inside an SDL2 OpenGL window.");
+            });
+        })
+    }
+
+    fn draw(&mut self, gl: &glow::Context, full_output: &FullOutput, window: &Window) {
+        unsafe {
+            gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+        }
+
+        let clipped_primitives = self.ctx.tessellate(full_output.shapes);
+        let textures_delta = full_output.textures_delta;
+        let (width, height) = window.drawable_size();
+
+        self.painter.paint_and_update_textures(
+            [width as u32, height as u32],
+            self.ctx.pixels_per_point(),
+            clipped_primitives.as_slice(),
+            &textures_delta,
+        );
+
+        window.gl_swap_window();
+    }
+}
+
+impl Drop for Widgets {
+    fn drop(&mut self) {
+        self.painter.destroy();
     }
 }
 
@@ -212,4 +429,33 @@ fn ensure_assets_workdir() -> Result<(), String> {
         }
     }
     Err("assets directory not found in executable ancestors".into())
+}
+
+struct FrameTimer {
+    last: Option<Instant>,
+    now: Option<Instant>,
+}
+
+impl FrameTimer {
+    fn new() -> Self {
+        Self {
+            last: None,
+            now: None,
+        }
+    }
+
+    fn update(&mut self) {
+        self.last = self.now;
+        self.now = Some(Instant::now());
+    }
+
+    fn elapsed_secs(&self) -> f64 {
+        (if let (Some(now), Some(last)) = (self.now, self.last) {
+            now - last
+        } else {
+            // Assume 1 frame at 60hz.
+            Duration::from_micros(16_667)
+        })
+        .as_secs_f64()
+    }
 }
