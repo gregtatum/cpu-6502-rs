@@ -4,11 +4,10 @@
 /// to see all of the values, set breakpoints when the memory changes to a certain value.
 /// It will support mousemoves, clicks, and keyboard navigation. It's a window that
 /// you will be able to open when working on the emulator as a whole.
-
 pub struct ZeroPageNew {
     open: bool,
     hover: Option<(u8, u8)>,
-    selected: Option<(u8, u8)>,
+    selected: (u8, u8),
     breakpoint_cell: Option<(u8, u8)>,
     breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
 }
@@ -22,7 +21,7 @@ impl ZeroPageNew {
         Self {
             open: true,
             hover: None,
-            selected: Some((0, 0)),
+            selected: (0, 0),
             breakpoint_cell: None,
             breakpoint_value: None,
         }
@@ -157,8 +156,7 @@ impl ZeroPageNew {
                             );
                             painter.rect_filled(cell_rect, CELL_RADIUS, cell_color);
 
-                            let stroke = if self.selected == Some((row as u8, col as u8))
-                            {
+                            let stroke = if self.selected == (row as u8, col as u8) {
                                 egui::Stroke {
                                     width: 2.0,
                                     color: egui::Color32::WHITE,
@@ -229,13 +227,15 @@ impl ZeroPageNew {
 
                 if response.clicked() {
                     if let Some(position) = response.interact_pointer_pos() {
-                        self.selected = position_to_cell(
+                        if let Some(cell) = position_to_cell(
                             position,
                             rect.min,
                             HEADER,
                             CELL,
                             ZERO_PAGE_SIDE,
-                        );
+                        ) {
+                            self.selected = cell;
+                        }
                     }
                 }
             });
@@ -265,41 +265,33 @@ impl ZeroPageNew {
     /// Move the grid selection from an arrow key press.
     fn change_selection(&mut self, dx: i8, dy: i8) {
         const ZERO_PAGE_SIDE: i8 = 16;
-        if self.selected.is_none() {
-            self.selected = Some((0, 0));
-            return;
-        }
-        if let Some((row, col)) = self.selected {
-            let mut new_col = col as i8 + dx;
-            let mut new_row = row as i8 + dy;
-            new_col = new_col.clamp(0, ZERO_PAGE_SIDE - 1);
-            new_row = new_row.clamp(0, ZERO_PAGE_SIDE - 1);
-            self.selected = Some((new_row as u8, new_col as u8));
-        }
+        let (row, col) = self.selected;
+        let mut new_col = col as i8 + dx;
+        let mut new_row = row as i8 + dy;
+        new_col = new_col.clamp(0, ZERO_PAGE_SIDE - 1);
+        new_row = new_row.clamp(0, ZERO_PAGE_SIDE - 1);
+        self.selected = (new_row as u8, new_col as u8);
     }
 
     /// Create the sidebar UI.
     fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         ui.vertical(|ui| {
             ui.group(|ui| {
-                if let Some((row, col)) = self.selected {
-                    let address: u16 = (row as u16) * 0x10 + col as u16;
-                    let value_str = self
-                        .sidebar_value(zero_page)
-                        .unwrap_or_else(|| "N/A".to_string());
-                    ui.monospace(format!("Address ${address:02X}, Value: {value_str}"));
-                } else {
-                    ui.label("Selected: none");
-                }
+                let (row, col) = self.selected;
+                let address: u16 = (row as u16) * 0x10 + col as u16;
+                let value_str = self
+                    .sidebar_value(zero_page)
+                    .unwrap_or_else(|| "N/A".to_string());
+                ui.monospace(format!("Address ${address:02X}, Value: {value_str}"));
 
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
 
-                let mut cell_bp = self.breakpoint_cell == self.selected;
+                let mut cell_bp = self.breakpoint_cell == Some(self.selected);
                 let mut value_bp = self
                     .breakpoint_value
-                    .map(|(r, c, _)| Some((r, c)) == self.selected)
+                    .map(|(r, c, _)| Some((r, c)) == Some(self.selected))
                     .unwrap_or(false);
                 let mut target_value: u8 = self
                     .breakpoint_value
@@ -309,7 +301,7 @@ impl ZeroPageNew {
                 ui.horizontal(|ui| {
                     if ui.checkbox(&mut cell_bp, "Breakpoint").clicked() {
                         if cell_bp {
-                            self.breakpoint_cell = self.selected;
+                            self.breakpoint_cell = Some(self.selected);
                             self.breakpoint_value = None;
                         } else {
                             self.breakpoint_cell = None;
@@ -318,10 +310,9 @@ impl ZeroPageNew {
 
                     if ui.checkbox(&mut value_bp, "Break on value").clicked() {
                         if value_bp {
-                            if let Some((row, col)) = self.selected {
-                                self.breakpoint_value = Some((row, col, target_value));
-                                self.breakpoint_cell = None;
-                            }
+                            let (row, col) = self.selected;
+                            self.breakpoint_value = Some((row, col, target_value));
+                            self.breakpoint_cell = None;
                         } else {
                             self.breakpoint_value = None;
                         }
@@ -335,10 +326,8 @@ impl ZeroPageNew {
                         if ui.text_edit_singleline(&mut value_str).changed() {
                             if let Ok(val) = u8::from_str_radix(value_str.trim(), 16) {
                                 target_value = val;
-                                if let Some((row, col)) = self.selected {
-                                    self.breakpoint_value =
-                                        Some((row, col, target_value));
-                                }
+                                let (row, col) = self.selected;
+                                self.breakpoint_value = Some((row, col, target_value));
                             }
                         }
                     });
@@ -348,9 +337,9 @@ impl ZeroPageNew {
     }
 
     fn sidebar_value(&self, zero_page: Option<&[u8; 256]>) -> Option<String> {
-        let (row, col) = self.selected?;
+        let (row, col) = self.selected;
         let idx = (row as usize) * 16 + col as usize;
-        let value = zero_page.map(|zp| zp.get(idx).copied()).flatten()?;
+        let value = zero_page.and_then(|zp| zp.get(idx).copied())?;
         Some(format!("0x{value:02X} ({value})"))
     }
 }
@@ -378,7 +367,7 @@ fn position_to_cell(
 
 fn dim_factor(
     hover: Option<(u8, u8)>,
-    selected: Option<(u8, u8)>,
+    selected: (u8, u8),
     row: u8,
     col: u8,
     dim_1: f32,
@@ -399,15 +388,14 @@ fn dim_factor(
         }
     };
 
-    if let Some((selected_row, selected_col)) = selected {
-        if selected_row == row && selected_col == col {
-            return 1.0;
-        }
-        if hover.is_some() {
-            factor *= unselected_dim_hovered;
-        } else {
-            factor *= unselected_dim;
-        }
+    let (selected_row, selected_col) = selected;
+    if selected_row == row && selected_col == col {
+        return 1.0;
+    }
+    if hover.is_some() {
+        factor *= unselected_dim_hovered;
+    } else {
+        factor *= unselected_dim;
     }
 
     factor
@@ -415,7 +403,7 @@ fn dim_factor(
 
 fn dim_factor_top(
     hover: Option<(u8, u8)>,
-    selected: Option<(u8, u8)>,
+    selected: (u8, u8),
     col: u8,
     dim_2: f32,
 ) -> f32 {
@@ -440,7 +428,7 @@ fn dim_factor_top(
 
 fn dim_factor_side(
     hover: Option<(u8, u8)>,
-    selected: Option<(u8, u8)>,
+    selected: (u8, u8),
     row: u8,
     dim_2: f32,
 ) -> f32 {
@@ -455,12 +443,11 @@ fn dim_factor_side(
         }
     };
 
-    if let Some((selected_row, _)) = selected {
-        if selected_row == row {
-            return 1.0;
-        }
-        factor *= 0.9;
+    let (selected_row, _) = selected;
+    if selected_row == row {
+        return 1.0;
     }
+    factor *= 0.9;
 
     factor
 }
