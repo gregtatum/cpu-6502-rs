@@ -271,19 +271,15 @@ impl ZeroPageNew {
             ui.add_space(8.0);
             ui.group(|ui| {
                 ui.set_min_size(egui::vec2(240.0, 420.0));
+
                 if let Some((row, col)) = self.selected {
                     let address: u16 = (row as u16) * 0x10 + col as u16;
-                    ui.monospace(format!("Selected: 0x{address:02X} ({row},{col})"));
+                    let value_str = self
+                        .sidebar_value(zero_page)
+                        .unwrap_or_else(|| "N/A".to_string());
+                    ui.monospace(format!("Address ${address:02X}, Value: {value_str}"));
                 } else {
                     ui.label("Selected: none");
-                }
-
-                ui.add_space(8.0);
-                ui.label("Value:");
-                if let Some(value) = self.sidebar_value(zero_page) {
-                    ui.monospace(value);
-                } else {
-                    ui.label("N/A");
                 }
 
                 ui.add_space(12.0);
@@ -337,10 +333,6 @@ impl ZeroPageNew {
                         }
                     });
                 }
-
-                ui.add_space(12.0);
-                ui.label("Notes:");
-                ui.text_edit_multiline(&mut self.sidebar_text);
             });
         });
     }
@@ -349,7 +341,7 @@ impl ZeroPageNew {
         let (row, col) = self.selected?;
         let idx = (row as usize) * 16 + col as usize;
         let value = zero_page.map(|zp| zp.get(idx).copied()).flatten()?;
-        Some(format!("0x{value:02X} @ {idx}"))
+        Some(format!("0x{value:02X} ({value})"))
     }
 }
 
