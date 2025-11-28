@@ -290,7 +290,6 @@ impl ZeroPageNew {
                 ui.separator();
                 ui.add_space(8.0);
 
-                ui.label("Breakpoints");
                 let mut cell_bp = self.breakpoint_cell == self.selected;
                 let mut value_bp = self
                     .breakpoint_value
@@ -301,28 +300,27 @@ impl ZeroPageNew {
                     .and_then(|(_, _, v)| Some(v))
                     .unwrap_or(0);
 
-                if ui.checkbox(&mut cell_bp, "Breakpoint on cell").clicked() {
-                    if cell_bp {
-                        self.breakpoint_cell = self.selected;
-                        self.breakpoint_value = None;
-                    } else {
-                        self.breakpoint_cell = None;
-                    }
-                }
-
-                if ui
-                    .checkbox(&mut value_bp, "Breakpoint on cell value")
-                    .clicked()
-                {
-                    if value_bp {
-                        if let Some((row, col)) = self.selected {
-                            self.breakpoint_value = Some((row, col, target_value));
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut cell_bp, "Breakpoint").clicked() {
+                        if cell_bp {
+                            self.breakpoint_cell = self.selected;
+                            self.breakpoint_value = None;
+                        } else {
                             self.breakpoint_cell = None;
                         }
-                    } else {
-                        self.breakpoint_value = None;
                     }
-                }
+
+                    if ui.checkbox(&mut value_bp, "on value").clicked() {
+                        if value_bp {
+                            if let Some((row, col)) = self.selected {
+                                self.breakpoint_value = Some((row, col, target_value));
+                                self.breakpoint_cell = None;
+                            }
+                        } else {
+                            self.breakpoint_value = None;
+                        }
+                    }
+                });
 
                 if value_bp {
                     ui.horizontal(|ui| {
