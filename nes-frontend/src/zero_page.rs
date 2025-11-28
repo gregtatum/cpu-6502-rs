@@ -38,18 +38,19 @@ impl ZeroPageWindow {
             .collapsible(false)
             .auto_sized()
             .show(ui.ctx(), |ui| {
-                self.handle_keyboard(ui);
+                let mut grid_has_focus = false;
                 ui.horizontal(|ui| {
-                    self.memory_grid(ui, zero_page);
+                    grid_has_focus = self.memory_grid(ui, zero_page);
                     self.sidebar(ui, zero_page);
                 });
+                self.handle_keyboard(ui, grid_has_focus);
             });
 
         self.open = open;
     }
 
     /// Draw the memory grid, a 16x16 visualization of the zero page memory.
-    fn memory_grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+    fn memory_grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) -> bool {
         const ZERO_PAGE_SIDE: usize = 16;
         const CELL: f32 = 30.0;
         const HEADER: f32 = 30.0;
@@ -62,12 +63,14 @@ impl ZeroPageWindow {
         let grid_width = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
         let grid_height = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
 
+        let mut grid_has_focus = false;
         ui.group(|ui| {
+            let sense = egui::Sense::click_and_drag()
+                .union(egui::Sense::focusable_noninteractive());
             ui.vertical(|ui| {
-                let (response, painter) = ui.allocate_painter(
-                    egui::vec2(grid_width, grid_height),
-                    egui::Sense::click_and_drag(),
-                );
+                let (response, painter) =
+                    ui.allocate_painter(egui::vec2(grid_width, grid_height), sense);
+                grid_has_focus = response.has_focus();
                 let rect = response.rect;
 
                 // Fill the background.
@@ -159,9 +162,14 @@ impl ZeroPageWindow {
                             painter.rect_filled(cell_rect, CELL_RADIUS, cell_color);
 
                             let stroke = if self.selected == (row as u8, col as u8) {
+                                let selected_color = if grid_has_focus {
+                                    ui.visuals().widgets.active.fg_stroke.color
+                                } else {
+                                    ui.visuals().widgets.inactive.fg_stroke.color
+                                };
                                 egui::Stroke {
                                     width: 2.0,
-                                    color: egui::Color32::WHITE,
+                                    color: selected_color,
                                 }
                             } else if self.hover == Some((row as u8, col as u8)) {
                                 egui::Stroke {
@@ -228,6 +236,7 @@ impl ZeroPageWindow {
                 }
 
                 if response.clicked() {
+                    response.request_focus();
                     if let Some(position) = response.interact_pointer_pos() {
                         if let Some(cell) = position_to_cell(
                             position,
@@ -242,10 +251,14 @@ impl ZeroPageWindow {
                 }
             });
         });
+        grid_has_focus
     }
 
     // Handle egui keyboard events when this window is open.
-    fn handle_keyboard(&mut self, ui: &mut egui::Ui) {
+    fn handle_keyboard(&mut self, ui: &mut egui::Ui, grid_has_focus: bool) {
+        if !grid_has_focus {
+            return;
+        }
         ui.input(|input| {
             for event in &input.events {
                 if let egui::Event::Key {
