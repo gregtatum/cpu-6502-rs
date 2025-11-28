@@ -275,21 +275,31 @@ impl ZeroPageNew {
 
     /// Create the sidebar UI.
     fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+        let zero_page = zero_page.expect("The zero page exists");
+
         ui.vertical(|ui| {
             ui.group(|ui| {
+                // Draw the value information.
                 let (row, col) = self.selected;
                 let address: u16 = (row as u16) * 0x10 + col as u16;
-                let value_str = self
-                    .sidebar_value(zero_page)
-                    .unwrap_or_else(|| "N/A".to_string());
-                ui.monospace(format!("Address ${address:02X}, Value: {value_str}"));
+                let value = {
+                    let (row, col) = self.selected;
+                    let idx = (row as usize) * 16 + col as usize;
+                    zero_page
+                        .get(idx)
+                        .expect("Out of bounds access on the zero_page.")
+                };
 
-                ui.add_space(12.0);
+                ui.monospace(format!("Address ${address:02X}"));
+                ui.monospace(format!("Hex     ${}", format!("0x{value:02X}")));
+                ui.monospace(format!("Decimal {}", format!("{value}")));
+                ui.monospace(format!("Binary  {}", format_as_bits(*value)));
+
                 ui.separator();
-                ui.add_space(8.0);
 
-                let mut cell_bp = self.breakpoint_cell == Some(self.selected);
-                let mut value_bp = self
+                // Compute the breakpoint display state.
+                let mut is_breakpoint_cell = self.breakpoint_cell == Some(self.selected);
+                let mut is_breakpoint_value = self
                     .breakpoint_value
                     .map(|(r, c, _)| Some((r, c)) == Some(self.selected))
                     .unwrap_or(false);
@@ -298,9 +308,10 @@ impl ZeroPageNew {
                     .and_then(|(_, _, v)| Some(v))
                     .unwrap_or(0);
 
+                // Draw the breakpoints.
                 ui.horizontal(|ui| {
-                    if ui.checkbox(&mut cell_bp, "Breakpoint").clicked() {
-                        if cell_bp {
+                    if ui.checkbox(&mut is_breakpoint_cell, "Breakpoint").clicked() {
+                        if is_breakpoint_cell {
                             self.breakpoint_cell = Some(self.selected);
                             self.breakpoint_value = None;
                         } else {
@@ -308,8 +319,11 @@ impl ZeroPageNew {
                         }
                     }
 
-                    if ui.checkbox(&mut value_bp, "Break on value").clicked() {
-                        if value_bp {
+                    if ui
+                        .checkbox(&mut is_breakpoint_value, "Break on value")
+                        .clicked()
+                    {
+                        if is_breakpoint_value {
                             let (row, col) = self.selected;
                             self.breakpoint_value = Some((row, col, target_value));
                             self.breakpoint_cell = None;
@@ -319,7 +333,7 @@ impl ZeroPageNew {
                     }
                 });
 
-                if value_bp {
+                if is_breakpoint_value {
                     ui.horizontal(|ui| {
                         ui.label("Target value (hex):");
                         let mut value_str = format!("{target_value:02X}");
@@ -334,13 +348,6 @@ impl ZeroPageNew {
                 }
             });
         });
-    }
-
-    fn sidebar_value(&self, zero_page: Option<&[u8; 256]>) -> Option<String> {
-        let (row, col) = self.selected;
-        let idx = (row as usize) * 16 + col as usize;
-        let value = zero_page.and_then(|zp| zp.get(idx).copied())?;
-        Some(format!("0x{value:02X} ({value})"))
     }
 }
 
@@ -365,6 +372,7 @@ fn position_to_cell(
     }
 }
 
+// Apply a dim factor the hex cells.
 fn dim_factor(
     hover: Option<(u8, u8)>,
     selected: (u8, u8),
@@ -401,6 +409,7 @@ fn dim_factor(
     factor
 }
 
+// Apply a dim factor to the top cells.
 fn dim_factor_top(
     hover: Option<(u8, u8)>,
     selected: (u8, u8),
@@ -426,6 +435,7 @@ fn dim_factor_top(
     factor
 }
 
+// Apply a dim factor to the side.
 fn dim_factor_side(
     hover: Option<(u8, u8)>,
     selected: (u8, u8),
@@ -488,4 +498,10 @@ fn hsv_to_rgb(mut h: f32, s: f32, v: f32) -> (u8, u8, u8) {
 
     let to_u8 = |f: f32| ((f + m) * 255.0).round().clamp(0.0, 255.0) as u8;
     (to_u8(rp), to_u8(gp), to_u8(bp))
+}
+
+fn format_as_bits(b: u8) -> String {
+    let bits = format!("{:08b}", b); // "00111111"
+    let grouped = bits[..4].to_string() + "_" + &bits[4..]; // "0011_1111"
+    format!("0b{}", grouped)
 }
