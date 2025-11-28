@@ -31,8 +31,10 @@ impl ZeroPageNew {
                             ui.vertical(|ui| {
                                 ui.label("Hex grid layout");
                                 ui.add_space(4.0);
-                                // Reserve space for the future hex grid drawing.
-                                ui.allocate_space(egui::vec2(400.0, 400.0));
+                                // Reserve space for the future hex grid drawing with a painter.
+                                let desired_size =
+                                    egui::vec2(ui.available_width().min(640.0), 420.0);
+                                let (_id, _rect) = ui.allocate_space(desired_size);
                             });
                         });
                     });
