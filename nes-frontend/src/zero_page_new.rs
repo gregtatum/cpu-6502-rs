@@ -29,7 +29,7 @@ impl ZeroPageNew {
                 ui.horizontal(|ui| {
                     self.grid(ui, zero_page);
                     ui.add_space(12.0);
-                    self.sidebar(ui);
+                    self.sidebar(ui, zero_page);
                 });
             });
 
@@ -203,16 +203,39 @@ impl ZeroPageNew {
         }
     }
 
-    fn sidebar(&mut self, ui: &mut egui::Ui) {
+    fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         ui.vertical(|ui| {
             ui.label("Sidebar");
             ui.add_space(8.0);
             ui.group(|ui| {
                 ui.set_min_size(egui::vec2(220.0, 400.0));
+                if let Some((row, col)) = self.selected {
+                    let address: u16 = (row as u16) * 0x10 + col as u16;
+                    ui.label(format!("Selected: 0x{address:02X} ({row},{col})"));
+                } else {
+                    ui.label("Selected: none");
+                }
+
+                ui.add_space(8.0);
+                ui.label("Value:");
+                if let Some(value) = self.sidebar_value(zero_page) {
+                    ui.label(value);
+                } else {
+                    ui.label("N/A");
+                }
+
+                ui.add_space(12.0);
                 ui.label("Notes:");
                 ui.text_edit_multiline(&mut self.sidebar_text);
             });
         });
+    }
+
+    fn sidebar_value(&self, zero_page: Option<&[u8; 256]>) -> Option<String> {
+        let (row, col) = self.selected?;
+        let idx = (row as usize) * 16 + col as usize;
+        let value = zero_page.map(|zp| zp.get(idx).copied()).flatten()?;
+        Some(format!("0x{value:02X} @ {idx}"))
     }
 }
 
