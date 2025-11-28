@@ -1,11 +1,19 @@
 /// Placeholder for the new zero page UI integration using egui + SDL2.
 pub struct ZeroPageNew {
     open: bool,
+    hover: Option<(u8, u8)>,
+    selected: Option<(u8, u8)>,
+    sidebar_text: String,
 }
 
 impl ZeroPageNew {
     pub fn new() -> Self {
-        Self { open: true }
+        Self {
+            open: true,
+            hover: None,
+            selected: None,
+            sidebar_text: String::new(),
+        }
     }
 
     /// Render the zero page UI into the provided egui `Ui`.
