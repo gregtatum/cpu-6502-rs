@@ -1,8 +1,10 @@
 pub mod drivers;
 pub mod zero_page;
+pub mod zero_page_new;
 
 use crate::drivers::controller_sdl2::ControllerManager;
 use crate::zero_page::ZeroPageWindow;
+use crate::zero_page_new::ZeroPageNew;
 use egui::FullOutput;
 use glow::HasContext;
 use nes_core::{
@@ -275,6 +277,7 @@ struct Widgets {
     painter: egui_glow::Painter,
     /// Integrate the SDL2 environment to the egui RawInput on every tick.
     input: egui::RawInput,
+    zero_page_new: ZeroPageNew,
 }
 
 impl Widgets {
@@ -300,6 +303,7 @@ impl Widgets {
             )
             .map_err(|err| err.to_string())?,
             input: Default::default(),
+            zero_page_new: ZeroPageNew::new(),
         })
     }
 
@@ -388,10 +392,10 @@ impl Widgets {
         // the next frame.
         let input = std::mem::take(&mut self.input);
 
+        let zero_page_new = &mut self.zero_page_new;
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.heading("Hello from egui + SDL2!");
-                ui.label("This UI is drawn inside an SDL2 OpenGL window.");
+                zero_page_new.widget(ui);
             });
         })
     }
