@@ -335,6 +335,7 @@ impl Widgets {
     fn convert_event(event: &sdl2::event::Event) -> Option<egui::Event> {
         use egui::PointerButton;
         use sdl2::event::Event;
+        use sdl2::keyboard::Keycode;
         use sdl2::mouse::MouseButton;
 
         let convert_mouse_event = |mouse_button| match mouse_button {
@@ -344,6 +345,18 @@ impl Widgets {
             MouseButton::X1 => Some(PointerButton::Extra1),
             MouseButton::X2 => Some(PointerButton::Extra2),
             MouseButton::Unknown => None,
+        };
+
+        let convert_key = |key| match key {
+            Keycode::Up => Some(egui::Key::ArrowUp),
+            Keycode::Down => Some(egui::Key::ArrowDown),
+            Keycode::Left => Some(egui::Key::ArrowLeft),
+            Keycode::Right => Some(egui::Key::ArrowRight),
+            Keycode::Return | Keycode::Return2 | Keycode::KpEnter => {
+                Some(egui::Key::Enter)
+            }
+            Keycode::Escape => Some(egui::Key::Escape),
+            _ => None,
         };
 
         match *event {
@@ -382,7 +395,28 @@ impl Widgets {
                 modifiers: Default::default(),
             }),
             Event::TextInput { ref text, .. } => Some(egui::Event::Text(text.clone())),
-            // KeyDown/Up -> egui::Event::Key, if you want full keyboard support
+            Event::KeyDown {
+                keycode: Some(keycode),
+                repeat,
+                ..
+            } => convert_key(keycode).map(|key| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat,
+                modifiers: Default::default(),
+            }),
+            Event::KeyUp {
+                keycode: Some(keycode),
+                repeat,
+                ..
+            } => convert_key(keycode).map(|key| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: false,
+                repeat,
+                modifiers: Default::default(),
+            }),
             _ => None,
         }
     }
