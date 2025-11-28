@@ -134,7 +134,20 @@ impl NesFrontend {
             // What other integrations from SDL2 to egui do we want to support?
             // Clipboard, others?
 
-            let full_output = self.widgets.update(&self.window, &self.frame_timer);
+            let zero_page_snapshot = {
+                let bus = self.nes_core.bus.borrow();
+                let mut data = [0u8; 256];
+                for (i, byte) in data.iter_mut().enumerate() {
+                    *byte = bus.read_u8(i as u16);
+                }
+                data
+            };
+
+            let full_output = self.widgets.update(
+                &self.window,
+                &self.frame_timer,
+                Some(zero_page_snapshot),
+            );
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
             let elapsed = self.frame_timer.frame_secs();
@@ -370,7 +383,12 @@ impl Widgets {
         }
     }
 
-    fn update(&mut self, window: &Window, frame_timer: &FrameTimer) -> FullOutput {
+    fn update(
+        &mut self,
+        window: &Window,
+        frame_timer: &FrameTimer,
+        zero_page_snapshot: Option<[u8; 256]>,
+    ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
         let (logical_width, logical_height) = window.size();
         let pixels_per_point = draw_width as f32 / logical_width.max(1) as f32;
@@ -393,9 +411,10 @@ impl Widgets {
         let input = std::mem::take(&mut self.input);
 
         let zero_page_new = &mut self.zero_page_new;
+        let zero_page_snapshot = zero_page_snapshot.map(Box::new);
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                zero_page_new.widget(ui);
+                zero_page_new.widget(ui, zero_page_snapshot.as_deref());
             });
         })
     }
