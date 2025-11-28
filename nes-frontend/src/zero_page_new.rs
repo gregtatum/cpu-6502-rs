@@ -61,9 +61,6 @@ impl ZeroPageNew {
         ui.group(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
             ui.vertical(|ui| {
-                ui.label("Hex grid");
-                ui.add_space(4.0);
-
                 let (response, painter) =
                     ui.allocate_painter(desired_size, egui::Sense::click_and_drag());
                 let rect = response.rect;
@@ -267,11 +264,7 @@ impl ZeroPageNew {
 
     fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         ui.vertical(|ui| {
-            ui.label("Sidebar");
-            ui.add_space(8.0);
             ui.group(|ui| {
-                ui.set_min_size(egui::vec2(240.0, 420.0));
-
                 if let Some((row, col)) = self.selected {
                     let address: u16 = (row as u16) * 0x10 + col as u16;
                     let value_str = self
@@ -306,7 +299,7 @@ impl ZeroPageNew {
                         }
                     }
 
-                    if ui.checkbox(&mut value_bp, "on value").clicked() {
+                    if ui.checkbox(&mut value_bp, "Break on value").clicked() {
                         if value_bp {
                             if let Some((row, col)) = self.selected {
                                 self.breakpoint_value = Some((row, col, target_value));
