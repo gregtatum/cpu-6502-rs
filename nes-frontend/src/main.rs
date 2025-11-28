@@ -296,7 +296,7 @@ impl Widgets {
     fn convert_event(event: &sdl2::event::Event) -> Option<egui::Event> {
         use egui::PointerButton;
         use sdl2::event::Event;
-        use sdl2::keyboard::Keycode;
+        use sdl2::keyboard::{Keycode, Mod};
         use sdl2::mouse::MouseButton;
 
         let convert_mouse_event = |mouse_button| match mouse_button {
@@ -309,6 +309,7 @@ impl Widgets {
         };
 
         let convert_key = |key| match key {
+            Keycode::Tab => Some(egui::Key::Tab),
             Keycode::Up => Some(egui::Key::ArrowUp),
             Keycode::Down => Some(egui::Key::ArrowDown),
             Keycode::Left => Some(egui::Key::ArrowLeft),
@@ -318,6 +319,15 @@ impl Widgets {
             }
             Keycode::Escape => Some(egui::Key::Escape),
             _ => None,
+        };
+
+        let convert_modifiers = |keymod: Mod| egui::Modifiers {
+            alt: keymod.intersects(Mod::LALTMOD | Mod::RALTMOD),
+            ctrl: keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD),
+            shift: keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD),
+            mac_cmd: keymod.intersects(Mod::LGUIMOD | Mod::RGUIMOD),
+            command: keymod
+                .intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LGUIMOD | Mod::RGUIMOD),
         };
 
         match *event {
@@ -359,24 +369,26 @@ impl Widgets {
             Event::KeyDown {
                 keycode: Some(keycode),
                 repeat,
+                keymod,
                 ..
             } => convert_key(keycode).map(|key| egui::Event::Key {
                 key,
                 physical_key: None,
                 pressed: true,
                 repeat,
-                modifiers: Default::default(),
+                modifiers: convert_modifiers(keymod),
             }),
             Event::KeyUp {
                 keycode: Some(keycode),
                 repeat,
+                keymod,
                 ..
             } => convert_key(keycode).map(|key| egui::Event::Key {
                 key,
                 physical_key: None,
                 pressed: false,
                 repeat,
-                modifiers: Default::default(),
+                modifiers: convert_modifiers(keymod),
             }),
             _ => None,
         }
