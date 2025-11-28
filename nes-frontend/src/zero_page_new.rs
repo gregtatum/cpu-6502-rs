@@ -156,12 +156,12 @@ impl ZeroPageNew {
                             {
                                 egui::Stroke {
                                     width: 2.0,
-                                    color: ui.visuals().selection.bg_fill,
+                                    color: egui::Color32::WHITE,
                                 }
                             } else if self.hover == Some((row as u8, col as u8)) {
                                 egui::Stroke {
                                     width: 1.5,
-                                    color: ui.visuals().widgets.hovered.bg_fill,
+                                    color: ui.visuals().widgets.hovered.fg_stroke.color,
                                 }
                             } else {
                                 egui::Stroke::NONE
@@ -172,7 +172,7 @@ impl ZeroPageNew {
                                     cell_rect,
                                     CELL_RADIUS,
                                     stroke,
-                                    egui::StrokeKind::Outside,
+                                    egui::StrokeKind::Inside,
                                 );
                             }
 
