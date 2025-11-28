@@ -4,6 +4,8 @@ pub struct ZeroPageNew {
     hover: Option<(u8, u8)>,
     selected: Option<(u8, u8)>,
     sidebar_text: String,
+    breakpoint_cell: Option<(u8, u8)>,
+    breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
 }
 
 impl ZeroPageNew {
@@ -17,6 +19,8 @@ impl ZeroPageNew {
             hover: None,
             selected: None,
             sidebar_text: String::new(),
+            breakpoint_cell: None,
+            breakpoint_value: None,
         }
     }
 
@@ -176,6 +180,20 @@ impl ZeroPageNew {
                                 );
                             }
 
+                            if let Some((br, bc)) = self.breakpoint_cell {
+                                if br == row as u8 && bc == col as u8 {
+                                    painter.rect_stroke(
+                                        cell_rect.shrink(2.0),
+                                        CELL_RADIUS,
+                                        egui::Stroke {
+                                            width: 1.5,
+                                            color: egui::Color32::from_rgb(255, 165, 0),
+                                        },
+                                        egui::StrokeKind::Inside,
+                                    );
+                                }
+                            }
+
                             painter.text(
                                 cell_rect.center(),
                                 egui::Align2::CENTER_CENTER,
@@ -266,6 +284,49 @@ impl ZeroPageNew {
                     ui.monospace(value);
                 } else {
                     ui.label("N/A");
+                }
+
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                ui.label("Breakpoints");
+                let mut cell_bp = self.breakpoint_cell == self.selected;
+                let mut value_bp = false;
+                if let (Some(selected), Some(value)) = (self.selected, zero_page) {
+                    let idx = (selected.0 as usize) * 16 + selected.1 as usize;
+                    if let Some(&byte) = value.get(idx) {
+                        value_bp =
+                            self.breakpoint_value == Some((selected.0, selected.1, byte));
+                    }
+                }
+
+                if ui.checkbox(&mut cell_bp, "Breakpoint on cell").clicked() {
+                    if cell_bp {
+                        self.breakpoint_cell = self.selected;
+                        self.breakpoint_value = None;
+                    } else {
+                        self.breakpoint_cell = None;
+                    }
+                }
+
+                if ui
+                    .checkbox(&mut value_bp, "Breakpoint on cell value")
+                    .clicked()
+                {
+                    if value_bp {
+                        if let (Some((row, col)), Some(values)) =
+                            (self.selected, zero_page)
+                        {
+                            let idx = (row as usize) * 16 + col as usize;
+                            if let Some(&byte) = values.get(idx) {
+                                self.breakpoint_value = Some((row, col, byte));
+                                self.breakpoint_cell = None;
+                            }
+                        }
+                    } else {
+                        self.breakpoint_value = None;
+                    }
                 }
 
                 ui.add_space(12.0);
