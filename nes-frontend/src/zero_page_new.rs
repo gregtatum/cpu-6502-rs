@@ -50,6 +50,7 @@ impl ZeroPageNew {
         let desired_size = egui::vec2(grid_width, grid_height);
 
         ui.group(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
             ui.vertical(|ui| {
                 ui.label("Hex grid");
                 ui.add_space(4.0);
@@ -88,7 +89,7 @@ impl ZeroPageNew {
                         pos,
                         egui::Align2::CENTER_CENTER,
                         label,
-                        egui::TextStyle::Body.resolve(ui.style()),
+                        egui::TextStyle::Monospace.resolve(ui.style()),
                         ui.visuals().strong_text_color(),
                     );
                 }
@@ -103,7 +104,7 @@ impl ZeroPageNew {
                         pos,
                         egui::Align2::CENTER_CENTER,
                         label,
-                        egui::TextStyle::Body.resolve(ui.style()),
+                        egui::TextStyle::Monospace.resolve(ui.style()),
                         ui.visuals().strong_text_color(),
                     );
                 }
@@ -140,7 +141,7 @@ impl ZeroPageNew {
                                 cell_rect.center(),
                                 egui::Align2::CENTER_CENTER,
                                 label,
-                                egui::TextStyle::Body.resolve(ui.style()),
+                                egui::TextStyle::Monospace.resolve(ui.style()),
                                 ui.visuals().strong_text_color(),
                             );
                         }
@@ -212,10 +213,10 @@ impl ZeroPageNew {
             ui.label("Sidebar");
             ui.add_space(8.0);
             ui.group(|ui| {
-                ui.set_min_size(egui::vec2(220.0, 400.0));
+                ui.set_min_size(egui::vec2(240.0, 420.0));
                 if let Some((row, col)) = self.selected {
                     let address: u16 = (row as u16) * 0x10 + col as u16;
-                    ui.label(format!("Selected: 0x{address:02X} ({row},{col})"));
+                    ui.monospace(format!("Selected: 0x{address:02X} ({row},{col})"));
                 } else {
                     ui.label("Selected: none");
                 }
@@ -223,7 +224,7 @@ impl ZeroPageNew {
                 ui.add_space(8.0);
                 ui.label("Value:");
                 if let Some(value) = self.sidebar_value(zero_page) {
-                    ui.label(value);
+                    ui.monospace(value);
                 } else {
                     ui.label("N/A");
                 }
