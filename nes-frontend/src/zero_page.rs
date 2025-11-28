@@ -259,25 +259,26 @@ impl ZeroPageWindow {
         if !grid_has_focus {
             return;
         }
-        ui.input(|input| {
-            for event in &input.events {
-                if let egui::Event::Key {
-                    key, pressed: true, ..
-                } = event
-                {
-                    ui.ctx().input_mut(|input| {
-                        input.consume_key(egui::Modifiers::default(), *key)
-                    });
-                    match key {
-                        egui::Key::ArrowUp => self.change_selection(0, -1),
-                        egui::Key::ArrowDown => self.change_selection(0, 1),
-                        egui::Key::ArrowLeft => self.change_selection(-1, 0),
-                        egui::Key::ArrowRight => self.change_selection(1, 0),
-                        _ => {}
-                    }
+        let events = ui.input(|input| input.events.clone());
+        for event in events {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            {
+                ui.ctx()
+                    .input_mut(|input| input.consume_key(modifiers, key));
+                match key {
+                    egui::Key::ArrowUp => self.change_selection(0, -1),
+                    egui::Key::ArrowDown => self.change_selection(0, 1),
+                    egui::Key::ArrowLeft => self.change_selection(-1, 0),
+                    egui::Key::ArrowRight => self.change_selection(1, 0),
+                    _ => {}
                 }
             }
-        });
+        }
     }
 
     /// Move the grid selection from an arrow key press.
