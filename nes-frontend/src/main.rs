@@ -134,20 +134,20 @@ impl NesFrontend {
             // What other integrations from SDL2 to egui do we want to support?
             // Clipboard, others?
 
-            let zero_page_snapshot = {
+            let zero_page_snapshot = if self.widgets.zero_page_open() {
                 let bus = self.nes_core.bus.borrow();
                 let mut data = [0u8; 256];
                 for (i, byte) in data.iter_mut().enumerate() {
                     *byte = bus.read_u8(i as u16);
                 }
-                data
+                Some(data)
+            } else {
+                None
             };
 
-            let full_output = self.widgets.update(
-                &self.window,
-                &self.frame_timer,
-                Some(zero_page_snapshot),
-            );
+            let full_output =
+                self.widgets
+                    .update(&self.window, &self.frame_timer, zero_page_snapshot);
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
             let elapsed = self.frame_timer.frame_secs();
@@ -294,6 +294,10 @@ struct Widgets {
 }
 
 impl Widgets {
+    fn zero_page_open(&self) -> bool {
+        self.zero_page_new.is_open()
+    }
+
     fn new(gl: Arc<glow::Context>) -> Result<Self, String> {
         // Extra preprocessor text injected at the top of both vertex + fragment shaders.
         let shader_prefix = "";

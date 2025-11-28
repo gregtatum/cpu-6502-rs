@@ -7,6 +7,10 @@ pub struct ZeroPageNew {
 }
 
 impl ZeroPageNew {
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     pub fn new() -> Self {
         Self {
             open: true,
