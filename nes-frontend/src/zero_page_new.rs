@@ -48,6 +48,7 @@ impl ZeroPageNew {
         const UNSELECTED_DIM_HOVERED: f32 = 0.9;
         const DIM_1: f32 = 0.9;
         const DIM_2: f32 = 0.8;
+        const CELL_RADIUS: f32 = 2.0;
 
         let grid_width = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
         let grid_height = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
@@ -145,18 +146,34 @@ impl ZeroPageNew {
                             let text_color =
                                 color_with_dim(ui.visuals().strong_text_color(), dim);
 
-                            let fill = match (self.selected, self.hover) {
-                                (Some(sel), _) if sel == (row as u8, col as u8) => {
-                                    Some(ui.visuals().selection.bg_fill)
+                            let cell_color = color_with_dim(
+                                byte_to_color(byte),
+                                dim.max(UNSELECTED_DIM),
+                            );
+                            painter.rect_filled(cell_rect, CELL_RADIUS, cell_color);
+
+                            let stroke = if self.selected == Some((row as u8, col as u8))
+                            {
+                                egui::Stroke {
+                                    width: 2.0,
+                                    color: ui.visuals().selection.bg_fill,
                                 }
-                                (_, Some(hover)) if hover == (row as u8, col as u8) => {
-                                    Some(ui.visuals().widgets.hovered.bg_fill)
+                            } else if self.hover == Some((row as u8, col as u8)) {
+                                egui::Stroke {
+                                    width: 1.5,
+                                    color: ui.visuals().widgets.hovered.bg_fill,
                                 }
-                                _ => None,
+                            } else {
+                                egui::Stroke::NONE
                             };
 
-                            if let Some(fill) = fill {
-                                painter.rect_filled(cell_rect, 2.0, fill);
+                            if stroke.width > 0.0 {
+                                painter.rect_stroke(
+                                    cell_rect,
+                                    CELL_RADIUS,
+                                    stroke,
+                                    egui::StrokeKind::Outside,
+                                );
                             }
 
                             painter.text(
@@ -381,4 +398,36 @@ fn color_with_dim(color: egui::Color32, factor: f32) -> egui::Color32 {
     let [r, g, b, a] = color.to_array();
     let scale = |v: u8| ((v as f32) * factor).clamp(0.0, 255.0) as u8;
     egui::Color32::from_rgba_premultiplied(scale(r), scale(g), scale(b), a)
+}
+
+fn byte_to_color(byte: u8) -> egui::Color32 {
+    let hue_deg = (byte as f32 / 255.0) * 120.0 + 210.0;
+    let s = 0.8;
+    let v = 0.35 + ((byte & 0b0000_0111) as f32 / 7.0) * 0.10;
+    let (r, g, b) = hsv_to_rgb(hue_deg, s, v);
+    egui::Color32::from_rgb(r, g, b)
+}
+
+fn hsv_to_rgb(mut h: f32, s: f32, v: f32) -> (u8, u8, u8) {
+    h = h % 360.0;
+    let c = v * s;
+    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+    let m = v - c;
+
+    let (rp, gp, bp) = if h < 60.0 {
+        (c, x, 0.0)
+    } else if h < 120.0 {
+        (x, c, 0.0)
+    } else if h < 180.0 {
+        (0.0, c, x)
+    } else if h < 240.0 {
+        (0.0, x, c)
+    } else if h < 300.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    let to_u8 = |f: f32| ((f + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    (to_u8(rp), to_u8(gp), to_u8(bp))
 }
