@@ -265,6 +265,9 @@ impl ZeroPageWindow {
                     key, pressed: true, ..
                 } = event
                 {
+                    ui.ctx().input_mut(|input| {
+                        input.consume_key(egui::Modifiers::default(), *key)
+                    });
                     match key {
                         egui::Key::ArrowUp => self.change_selection(0, -1),
                         egui::Key::ArrowDown => self.change_selection(0, 1),
