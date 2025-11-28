@@ -117,12 +117,14 @@ impl ZeroPageNew {
                                 egui::vec2(CELL, CELL),
                             );
 
-                            let fill = if self.selected == Some((row as u8, col as u8)) {
-                                Some(ui.visuals().selection.bg_fill)
-                            } else if self.hover == Some((row as u8, col as u8)) {
-                                Some(ui.visuals().widgets.hovered.bg_fill)
-                            } else {
-                                None
+                            let fill = match (self.selected, self.hover) {
+                                (Some(sel), _) if sel == (row as u8, col as u8) => {
+                                    Some(ui.visuals().selection.bg_fill)
+                                }
+                                (_, Some(hover)) if hover == (row as u8, col as u8) => {
+                                    Some(ui.visuals().widgets.hovered.bg_fill)
+                                }
+                                _ => None,
                             };
 
                             if let Some(fill) = fill {
