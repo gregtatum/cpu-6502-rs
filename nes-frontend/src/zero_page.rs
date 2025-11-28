@@ -1,3 +1,5 @@
+const SIDEBAR_WIDTH: f32 = 200.0;
+
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
 /// once completed will serve as a debug point for the zero page. You will be able
@@ -279,6 +281,7 @@ impl ZeroPageWindow {
 
         ui.vertical(|ui| {
             ui.group(|ui| {
+                ui.set_max_width(SIDEBAR_WIDTH);
                 // Draw the value information.
                 let (row, col) = self.selected;
                 let address: u16 = (row as u16) * 0x10 + col as u16;
