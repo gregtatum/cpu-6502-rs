@@ -44,6 +44,10 @@ impl ZeroPageNew {
         const ZERO_PAGE_SIDE: usize = 16;
         const CELL: f32 = 30.0;
         const HEADER: f32 = 30.0;
+        const UNSELECTED_DIM: f32 = 0.8;
+        const UNSELECTED_DIM_HOVERED: f32 = 0.9;
+        const DIM_1: f32 = 0.9;
+        const DIM_2: f32 = 0.8;
 
         let grid_width = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
         let grid_height = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
@@ -81,6 +85,8 @@ impl ZeroPageNew {
                 // Header labels
                 for col in 0..ZERO_PAGE_SIDE {
                     let label = format!("{col:02X}");
+                    let dim = dim_factor_top(self.hover, self.selected, col as u8, DIM_2);
+                    let color = color_with_dim(ui.visuals().strong_text_color(), dim);
                     let pos = egui::pos2(
                         rect.min.x + HEADER + col as f32 * CELL + CELL * 0.5,
                         rect.min.y + HEADER * 0.5,
@@ -90,12 +96,15 @@ impl ZeroPageNew {
                         egui::Align2::CENTER_CENTER,
                         label,
                         egui::TextStyle::Monospace.resolve(ui.style()),
-                        ui.visuals().strong_text_color(),
+                        color,
                     );
                 }
 
                 for row in 0..ZERO_PAGE_SIDE {
                     let label = format!("{row:02X}");
+                    let dim =
+                        dim_factor_side(self.hover, self.selected, row as u8, DIM_2);
+                    let color = color_with_dim(ui.visuals().strong_text_color(), dim);
                     let pos = egui::pos2(
                         rect.min.x + HEADER * 0.5,
                         rect.min.y + HEADER + row as f32 * CELL + CELL * 0.5,
@@ -105,7 +114,7 @@ impl ZeroPageNew {
                         egui::Align2::CENTER_CENTER,
                         label,
                         egui::TextStyle::Monospace.resolve(ui.style()),
-                        ui.visuals().strong_text_color(),
+                        color,
                     );
                 }
 
@@ -122,6 +131,19 @@ impl ZeroPageNew {
                                 ),
                                 egui::vec2(CELL, CELL),
                             );
+
+                            let dim = dim_factor(
+                                self.hover,
+                                self.selected,
+                                row as u8,
+                                col as u8,
+                                DIM_1,
+                                DIM_2,
+                                UNSELECTED_DIM,
+                                UNSELECTED_DIM_HOVERED,
+                            );
+                            let text_color =
+                                color_with_dim(ui.visuals().strong_text_color(), dim);
 
                             let fill = match (self.selected, self.hover) {
                                 (Some(sel), _) if sel == (row as u8, col as u8) => {
@@ -142,7 +164,7 @@ impl ZeroPageNew {
                                 egui::Align2::CENTER_CENTER,
                                 label,
                                 egui::TextStyle::Monospace.resolve(ui.style()),
-                                ui.visuals().strong_text_color(),
+                                text_color,
                             );
                         }
                     }
@@ -262,4 +284,101 @@ fn pos_to_cell(
     } else {
         None
     }
+}
+
+fn dim_factor(
+    hover: Option<(u8, u8)>,
+    selected: Option<(u8, u8)>,
+    row: u8,
+    col: u8,
+    dim_1: f32,
+    dim_2: f32,
+    unselected_dim: f32,
+    unselected_dim_hovered: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((hover_row, hover_col)) => {
+            if hover_row == row && hover_col == col {
+                1.0
+            } else if hover_row == row || hover_col == col {
+                dim_1
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    if let Some((selected_row, selected_col)) = selected {
+        if selected_row == row && selected_col == col {
+            return 1.0;
+        }
+        if hover.is_some() {
+            factor *= unselected_dim_hovered;
+        } else {
+            factor *= unselected_dim;
+        }
+    }
+
+    factor
+}
+
+fn dim_factor_top(
+    hover: Option<(u8, u8)>,
+    selected: Option<(u8, u8)>,
+    col: u8,
+    dim_2: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((_, hc)) => {
+            if hc == col {
+                1.0
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    if let Some((_, selected_col)) = selected {
+        if selected_col == col {
+            return 1.0;
+        }
+        factor *= 0.9;
+    }
+
+    factor
+}
+
+fn dim_factor_side(
+    hover: Option<(u8, u8)>,
+    selected: Option<(u8, u8)>,
+    row: u8,
+    dim_2: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((hr, _)) => {
+            if hr == row {
+                1.0
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    if let Some((selected_row, _)) = selected {
+        if selected_row == row {
+            return 1.0;
+        }
+        factor *= 0.9;
+    }
+
+    factor
+}
+
+fn color_with_dim(color: egui::Color32, factor: f32) -> egui::Color32 {
+    let [r, g, b, a] = color.to_array();
+    let scale = |v: u8| ((v as f32) * factor).clamp(0.0, 255.0) as u8;
+    egui::Color32::from_rgba_premultiplied(scale(r), scale(g), scale(b), a)
 }
