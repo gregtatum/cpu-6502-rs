@@ -1,4 +1,10 @@
-/// Placeholder for the new zero page UI integration using egui + SDL2.
+/// Create a Window that will visualize the zero page memory. The zero page memory
+/// in the NES is the fast working memory that is used as working memory. This window
+/// once completed will serve as a debug point for the zero page. You will be able
+/// to see all of the values, set breakpoints when the memory changes to a certain value.
+/// It will support mousemoves, clicks, and keyboard navigation. It's a window that
+/// you will be able to open when working on the emulator as a whole.
+
 pub struct ZeroPageNew {
     open: bool,
     hover: Option<(u8, u8)>,
@@ -22,7 +28,7 @@ impl ZeroPageNew {
         }
     }
 
-    /// Render the zero page UI into the provided egui `Ui`.
+    /// Render the zero page widget using egui immediate mode.
     pub fn widget(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         let mut open = self.open;
 
@@ -33,8 +39,7 @@ impl ZeroPageNew {
             .show(ui.ctx(), |ui| {
                 self.handle_keyboard(ui);
                 ui.horizontal(|ui| {
-                    self.grid(ui, zero_page);
-                    ui.add_space(12.0);
+                    self.memory_grid(ui, zero_page);
                     self.sidebar(ui, zero_page);
                 });
             });
@@ -42,7 +47,8 @@ impl ZeroPageNew {
         self.open = open;
     }
 
-    fn grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+    /// Draw the memory grid, a 16x16 visualization of the zero page memory.
+    fn memory_grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         const ZERO_PAGE_SIDE: usize = 16;
         const CELL: f32 = 30.0;
         const HEADER: f32 = 30.0;
@@ -54,27 +60,27 @@ impl ZeroPageNew {
 
         let grid_width = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
         let grid_height = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
-        let desired_size = egui::vec2(grid_width, grid_height);
 
         ui.group(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
             ui.vertical(|ui| {
-                let (response, painter) =
-                    ui.allocate_painter(desired_size, egui::Sense::click_and_drag());
+                let (response, painter) = ui.allocate_painter(
+                    egui::vec2(grid_width, grid_height),
+                    egui::Sense::click_and_drag(),
+                );
                 let rect = response.rect;
 
-                // Background
+                // Fill the background.
                 painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
 
                 let grid_stroke = ui.visuals().widgets.noninteractive.bg_stroke;
 
+                // Draw the grid.
                 for row in 0..=ZERO_PAGE_SIDE {
                     let y = rect.min.y + HEADER + row as f32 * CELL;
                     let start = egui::pos2(rect.min.x + HEADER, y);
                     let end = egui::pos2(rect.max.x, y);
                     painter.line_segment([start, end], grid_stroke);
                 }
-
                 for col in 0..=ZERO_PAGE_SIDE {
                     let x = rect.min.x + HEADER + col as f32 * CELL;
                     let start = egui::pos2(x, rect.min.y + HEADER);
@@ -82,9 +88,9 @@ impl ZeroPageNew {
                     painter.line_segment([start, end], grid_stroke);
                 }
 
-                // Header labels
+                // Draw the header labels.
                 for col in 0..ZERO_PAGE_SIDE {
-                    let label = format!("{col:02X}");
+                    let label = format!("x{col:01X}");
                     let dim = dim_factor_top(self.hover, self.selected, col as u8, DIM_2);
                     let color = color_with_dim(ui.visuals().strong_text_color(), dim);
                     let pos = egui::pos2(
@@ -100,8 +106,9 @@ impl ZeroPageNew {
                     );
                 }
 
+                // Draw the column labels.
                 for row in 0..ZERO_PAGE_SIDE {
-                    let label = format!("{row:02X}");
+                    let label = format!("{row:01X}x");
                     let dim =
                         dim_factor_side(self.hover, self.selected, row as u8, DIM_2);
                     let color = color_with_dim(ui.visuals().strong_text_color(), dim);
@@ -123,7 +130,6 @@ impl ZeroPageNew {
                         for col in 0..ZERO_PAGE_SIDE {
                             let index = row * ZERO_PAGE_SIDE + col;
                             let byte = values[index];
-                            let label = format!("{byte:02X}");
                             let cell_rect = egui::Rect::from_min_size(
                                 egui::pos2(
                                     rect.min.x + HEADER + col as f32 * CELL,
@@ -175,8 +181,15 @@ impl ZeroPageNew {
                                 );
                             }
 
-                            if let Some((br, bc)) = self.breakpoint_cell {
-                                if br == row as u8 && bc == col as u8 {
+                            // Draw the breakpoint outline.
+                            let breakpoint = self.breakpoint_cell.or_else(|| {
+                                self.breakpoint_value.map(|(r, c, _)| (r, c))
+                            });
+                            if let Some((breakpoint_row, breakpoint_column)) = breakpoint
+                            {
+                                if breakpoint_row == row as u8
+                                    && breakpoint_column == col as u8
+                                {
                                     painter.rect_stroke(
                                         cell_rect.shrink(2.0),
                                         CELL_RADIUS,
@@ -189,10 +202,11 @@ impl ZeroPageNew {
                                 }
                             }
 
+                            // Draw the text, e.g. "2F", "00", "1E"
                             painter.text(
                                 cell_rect.center(),
                                 egui::Align2::CENTER_CENTER,
-                                label,
+                                format!("{byte:02X}"),
                                 egui::TextStyle::Monospace.resolve(ui.style()),
                                 text_color,
                             );
@@ -201,51 +215,55 @@ impl ZeroPageNew {
                 }
 
                 // Hover + selection mapping
-                if let Some(pos) = response.hover_pos() {
-                    self.hover = pos_to_cell(pos, rect.min, HEADER, CELL, ZERO_PAGE_SIDE);
+                if let Some(position) = response.hover_pos() {
+                    self.hover = position_to_cell(
+                        position,
+                        rect.min,
+                        HEADER,
+                        CELL,
+                        ZERO_PAGE_SIDE,
+                    );
                 } else {
                     self.hover = None;
                 }
 
                 if response.clicked() {
-                    if let Some(pos) = response.interact_pointer_pos() {
-                        self.selected =
-                            pos_to_cell(pos, rect.min, HEADER, CELL, ZERO_PAGE_SIDE);
+                    if let Some(position) = response.interact_pointer_pos() {
+                        self.selected = position_to_cell(
+                            position,
+                            rect.min,
+                            HEADER,
+                            CELL,
+                            ZERO_PAGE_SIDE,
+                        );
                     }
                 }
             });
         });
     }
 
+    // Handle egui keyboard events when this window is open.
     fn handle_keyboard(&mut self, ui: &mut egui::Ui) {
-        let mut select_if_empty = false;
         ui.input(|input| {
             for event in &input.events {
                 if let egui::Event::Key {
-                    key,
-                    pressed: true,
-                    repeat: _,
-                    ..
+                    key, pressed: true, ..
                 } = event
                 {
                     match key {
-                        egui::Key::ArrowUp => self.bump_selection(0i8, -1),
-                        egui::Key::ArrowDown => self.bump_selection(0i8, 1),
-                        egui::Key::ArrowLeft => self.bump_selection(-1, 0),
-                        egui::Key::ArrowRight => self.bump_selection(1, 0),
-                        egui::Key::Enter => select_if_empty = true,
+                        egui::Key::ArrowUp => self.change_selection(0, -1),
+                        egui::Key::ArrowDown => self.change_selection(0, 1),
+                        egui::Key::ArrowLeft => self.change_selection(-1, 0),
+                        egui::Key::ArrowRight => self.change_selection(1, 0),
                         _ => {}
                     }
                 }
             }
         });
-
-        if select_if_empty && self.selected.is_none() {
-            self.selected = Some((0, 0));
-        }
     }
 
-    fn bump_selection(&mut self, dx: i8, dy: i8) {
+    /// Move the grid selection from an arrow key press.
+    fn change_selection(&mut self, dx: i8, dy: i8) {
         const ZERO_PAGE_SIDE: i8 = 16;
         if self.selected.is_none() {
             self.selected = Some((0, 0));
@@ -260,6 +278,7 @@ impl ZeroPageNew {
         }
     }
 
+    /// Create the sidebar UI.
     fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
         ui.vertical(|ui| {
             ui.group(|ui| {
@@ -336,7 +355,8 @@ impl ZeroPageNew {
     }
 }
 
-fn pos_to_cell(
+/// Take an egui position and map it to a cell position.
+fn position_to_cell(
     pos: egui::Pos2,
     rect_min: egui::Pos2,
     header: f32,
@@ -410,12 +430,10 @@ fn dim_factor_top(
         }
     };
 
-    if let Some((_, selected_col)) = selected {
-        if selected_col == col {
-            return 1.0;
-        }
-        factor *= 0.9;
+    if selected.1 == col {
+        return 1.0;
     }
+    factor *= 0.9;
 
     factor
 }
