@@ -172,7 +172,7 @@ impl ZeroPageNew {
                 if let egui::Event::Key {
                     key,
                     pressed: true,
-                    repeat: false,
+                    repeat: _,
                     ..
                 } = event
                 {
