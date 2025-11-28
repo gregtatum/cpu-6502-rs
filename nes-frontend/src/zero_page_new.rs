@@ -3,7 +3,6 @@ pub struct ZeroPageNew {
     open: bool,
     hover: Option<(u8, u8)>,
     selected: Option<(u8, u8)>,
-    sidebar_text: String,
     breakpoint_cell: Option<(u8, u8)>,
     breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
 }
@@ -17,8 +16,7 @@ impl ZeroPageNew {
         Self {
             open: true,
             hover: None,
-            selected: None,
-            sidebar_text: String::new(),
+            selected: Some((0, 0)),
             breakpoint_cell: None,
             breakpoint_value: None,
         }
