@@ -25,6 +25,7 @@ impl ZeroPageNew {
             .collapsible(false)
             .auto_sized()
             .show(ui.ctx(), |ui| {
+                self.handle_keyboard(ui);
                 ui.horizontal(|ui| {
                     self.grid(ui, zero_page);
                     ui.add_space(12.0);
@@ -157,6 +158,49 @@ impl ZeroPageNew {
                 }
             });
         });
+    }
+
+    fn handle_keyboard(&mut self, ui: &mut egui::Ui) {
+        let mut select_if_empty = false;
+        ui.input(|input| {
+            for event in &input.events {
+                if let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    repeat: false,
+                    ..
+                } = event
+                {
+                    match key {
+                        egui::Key::ArrowUp => self.bump_selection(0i8, -1),
+                        egui::Key::ArrowDown => self.bump_selection(0i8, 1),
+                        egui::Key::ArrowLeft => self.bump_selection(-1, 0),
+                        egui::Key::ArrowRight => self.bump_selection(1, 0),
+                        egui::Key::Enter => select_if_empty = true,
+                        _ => {}
+                    }
+                }
+            }
+        });
+
+        if select_if_empty && self.selected.is_none() {
+            self.selected = Some((0, 0));
+        }
+    }
+
+    fn bump_selection(&mut self, dx: i8, dy: i8) {
+        const ZERO_PAGE_SIDE: i8 = 16;
+        if self.selected.is_none() {
+            self.selected = Some((0, 0));
+            return;
+        }
+        if let Some((row, col)) = self.selected {
+            let mut new_col = col as i8 + dx;
+            let mut new_row = row as i8 + dy;
+            new_col = new_col.clamp(0, ZERO_PAGE_SIDE - 1);
+            new_row = new_row.clamp(0, ZERO_PAGE_SIDE - 1);
+            self.selected = Some((new_row as u8, new_col as u8));
+        }
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
