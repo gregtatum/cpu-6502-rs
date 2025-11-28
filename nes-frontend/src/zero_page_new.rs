@@ -292,14 +292,14 @@ impl ZeroPageNew {
 
                 ui.label("Breakpoints");
                 let mut cell_bp = self.breakpoint_cell == self.selected;
-                let mut value_bp = false;
-                if let (Some(selected), Some(value)) = (self.selected, zero_page) {
-                    let idx = (selected.0 as usize) * 16 + selected.1 as usize;
-                    if let Some(&byte) = value.get(idx) {
-                        value_bp =
-                            self.breakpoint_value == Some((selected.0, selected.1, byte));
-                    }
-                }
+                let mut value_bp = self
+                    .breakpoint_value
+                    .map(|(r, c, _)| Some((r, c)) == self.selected)
+                    .unwrap_or(false);
+                let mut target_value: u8 = self
+                    .breakpoint_value
+                    .and_then(|(_, _, v)| Some(v))
+                    .unwrap_or(0);
 
                 if ui.checkbox(&mut cell_bp, "Breakpoint on cell").clicked() {
                     if cell_bp {
@@ -315,18 +315,29 @@ impl ZeroPageNew {
                     .clicked()
                 {
                     if value_bp {
-                        if let (Some((row, col)), Some(values)) =
-                            (self.selected, zero_page)
-                        {
-                            let idx = (row as usize) * 16 + col as usize;
-                            if let Some(&byte) = values.get(idx) {
-                                self.breakpoint_value = Some((row, col, byte));
-                                self.breakpoint_cell = None;
-                            }
+                        if let Some((row, col)) = self.selected {
+                            self.breakpoint_value = Some((row, col, target_value));
+                            self.breakpoint_cell = None;
                         }
                     } else {
                         self.breakpoint_value = None;
                     }
+                }
+
+                if value_bp {
+                    ui.horizontal(|ui| {
+                        ui.label("Target value (hex):");
+                        let mut value_str = format!("{target_value:02X}");
+                        if ui.text_edit_singleline(&mut value_str).changed() {
+                            if let Ok(val) = u8::from_str_radix(value_str.trim(), 16) {
+                                target_value = val;
+                                if let Some((row, col)) = self.selected {
+                                    self.breakpoint_value =
+                                        Some((row, col, target_value));
+                                }
+                            }
+                        }
+                    });
                 }
 
                 ui.add_space(12.0);
