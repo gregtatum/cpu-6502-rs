@@ -1,10 +1,8 @@
 pub mod drivers;
 pub mod zero_page;
-pub mod zero_page_new;
 
 use crate::drivers::controller_sdl2::ControllerManager;
 use crate::zero_page::ZeroPageWindow;
-use crate::zero_page_new::ZeroPageNew;
 use egui::FullOutput;
 use glow::HasContext;
 use nes_core::{
@@ -31,7 +29,6 @@ struct NesFrontend {
     gl: Arc<glow::Context>,
     #[expect(dead_code, reason = "RAII Handle")]
     gl_context: sdl2::video::GLContext,
-    zero_page_window: Option<ZeroPageWindow>,
     window: Window,
     frame_timer: FrameTimer,
 }
@@ -52,8 +49,6 @@ impl NesFrontend {
             widgets: Widgets::new(gl.clone())?,
             gl,
             gl_context,
-            // Disable for now:
-            zero_page_window: None, // Some(ZeroPageWindow::new(&sdl)?)
             frame_timer: FrameTimer::new(),
         })
     }
@@ -126,11 +121,6 @@ impl NesFrontend {
                 ExitReason::BRK | ExitReason::MaxTicks => {}
             }
 
-            if let Some(window) = self.zero_page_window.as_mut() {
-                let bus = self.nes_core.bus.borrow();
-                window.draw(&bus)?;
-            }
-
             // What other integrations from SDL2 to egui do we want to support?
             // Clipboard, others?
 
@@ -178,57 +168,28 @@ impl NesFrontend {
                 Event::KeyDown {
                     keycode: Some(Keycode::W),
                     keymod,
-                    window_id,
                     ..
                 } if is_command_modifier(keymod) => {
-                    self.close_window(window_id);
-                    if !self.has_open_windows() {
-                        return Ok(true);
-                    }
+                    return Ok(true);
                 }
 
                 // Window close button
                 Event::Window {
                     win_event: sdl2::event::WindowEvent::Close,
-                    window_id,
                     ..
                 } => {
-                    self.close_window(window_id);
-                    if !self.has_open_windows() {
-                        return Ok(true);
-                    }
+                    return Ok(true);
                 }
 
                 // Pass the events down to the individual components.
                 _ => {
                     self.widgets.add_event(&event);
-
-                    if let Some(zero_page_window) = self.zero_page_window.as_mut() {
-                        if event.get_window_id() == Some(zero_page_window.window_id) {
-                            zero_page_window.handle_event(&event);
-                        }
-                    }
                     self.controller_manager.handle_event(&event, &self.nes_core)
                 }
             }
         }
 
         Ok(false)
-    }
-
-    fn close_window(&mut self, window_id: u32) {
-        if self
-            .zero_page_window
-            .as_ref()
-            .map(|window| window.window_id)
-            == Some(window_id)
-        {
-            self.zero_page_window = None;
-        }
-    }
-
-    fn has_open_windows(&self) -> bool {
-        self.zero_page_window.is_some()
     }
 }
 
@@ -290,12 +251,12 @@ struct Widgets {
     painter: egui_glow::Painter,
     /// Integrate the SDL2 environment to the egui RawInput on every tick.
     input: egui::RawInput,
-    zero_page_new: ZeroPageNew,
+    zero_page: ZeroPageWindow,
 }
 
 impl Widgets {
     fn zero_page_open(&self) -> bool {
-        self.zero_page_new.is_open()
+        self.zero_page.is_open()
     }
 
     fn new(gl: Arc<glow::Context>) -> Result<Self, String> {
@@ -320,7 +281,7 @@ impl Widgets {
             )
             .map_err(|err| err.to_string())?,
             input: Default::default(),
-            zero_page_new: ZeroPageNew::new(),
+            zero_page: ZeroPageWindow::new(),
         })
     }
 
@@ -448,7 +409,7 @@ impl Widgets {
         // the next frame.
         let input = std::mem::take(&mut self.input);
 
-        let zero_page_new = &mut self.zero_page_new;
+        let zero_page_new = &mut self.zero_page;
         let zero_page_snapshot = zero_page_snapshot.map(Box::new);
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {

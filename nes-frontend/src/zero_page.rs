@@ -1,35 +1,3 @@
-use egui::{pos2, Event as EguiEvent, Modifiers as EguiModifiers};
-use nes_core::bus::Bus;
-use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::{Canvas, Texture, TextureCreator};
-use sdl2::video::{Window, WindowContext};
-use sdl2::Sdl;
-use sdl2::{
-    event::{Event, WindowEvent},
-    keyboard::Keycode,
-    mouse::MouseButton,
-    render::BlendMode,
-    ttf,
-};
-use std::cell::RefCell;
-
-const ZERO_PAGE_SIDE: u16 = 16;
-const ZERO_PAGE_BYTES: u16 = ZERO_PAGE_SIDE * ZERO_PAGE_SIDE;
-const CELL_SCALE: u32 = 30;
-const CELL_PADDING: u32 = 5;
-const HEADER_SIZE: u32 = CELL_SCALE;
-const HEX_FONT_SIZE: u16 = 80;
-const GRID_WIDTH: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
-const SIDEBAR_WIDTH: u32 = 200;
-const WINDOW_WIDTH: u32 = GRID_WIDTH + SIDEBAR_WIDTH;
-const WINDOW_HEIGHT: u32 = (ZERO_PAGE_SIDE as u32 + 1) * CELL_SCALE;
-const UNSELECTED_DIM: f32 = 0.8;
-const UNSELECTED_DIM_HOVERED: f32 = 0.9;
-const DIM_1: f32 = 0.9;
-const DIM_2: f32 = 0.8;
-const PIXEL_RATIO: f32 = 2.0;
-
 /// Create a Window that will visualize the zero page memory. The zero page memory
 /// in the NES is the fast working memory that is used as working memory. This window
 /// once completed will serve as a debug point for the zero page. You will be able
@@ -37,525 +5,478 @@ const PIXEL_RATIO: f32 = 2.0;
 /// It will support mousemoves, clicks, and keyboard navigation. It's a window that
 /// you will be able to open when working on the emulator as a whole.
 pub struct ZeroPageWindow {
-    canvas: RefCell<Canvas<Window>>,
-    hex_textures: HexTextures,
-    header_textures: HeaderTextures,
-    texture_creator: TextureCreator<WindowContext>,
-    egui_ctx: egui::Context,
-    egui_events: Vec<EguiEvent>,
-    sidebar_text: String,
-    sidebar_focused: bool,
-    egui_wants_keyboard: bool,
-    egui_wants_pointer: bool,
-    egui_modifiers: EguiModifiers,
-    hover: Option<(u8, u8)>,    // (row, col)
-    selected: Option<(u8, u8)>, // (row, col)
-    pub window_id: u32,
+    open: bool,
+    hover: Option<(u8, u8)>,
+    selected: (u8, u8),
+    breakpoint_cell: Option<(u8, u8)>,
+    breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
 }
 
 impl ZeroPageWindow {
-    /// Initialize the video subsystem, creates a [Window]`, the [Canvas].
-    pub fn new(sdl: &Sdl) -> Result<Self, String> {
-        let video_subsystem = sdl.video()?;
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
 
-        // The outer window which contains options such as the sizing and borders.
-        let window = video_subsystem
-            .window("Zero Page Memory", WINDOW_WIDTH, WINDOW_HEIGHT)
-            .position_centered()
-            .allow_highdpi()
-            .build()
-            .map_err(|e| e.to_string())?;
-
-        // Owns the canvas that can be drawn to, and is associated with the window.
-        let mut canvas = window
-            .into_canvas()
-            .accelerated()
-            .present_vsync()
-            .build()
-            .map_err(|e| e.to_string())?;
-
-        canvas
-            .set_logical_size(WINDOW_WIDTH, WINDOW_HEIGHT)
-            .map_err(|e| e.to_string())?;
-
-        canvas.set_blend_mode(BlendMode::Blend);
-
-        let window_id = canvas.window().id();
-        let texture_creator = canvas.texture_creator();
-        let mut view = Self {
-            canvas: RefCell::new(canvas),
-            texture_creator,
-            hex_textures: Default::default(),
-            header_textures: Default::default(),
-            egui_ctx: Default::default(),
-            egui_events: Default::default(),
-            sidebar_text: Default::default(),
-            egui_modifiers: Default::default(),
-            sidebar_focused: false,
-            egui_wants_keyboard: false,
-            egui_wants_pointer: false,
+    pub fn new() -> Self {
+        Self {
+            open: true,
             hover: None,
-            selected: None,
-            window_id,
-        };
-
-        view.hex_textures.build_textures(&view.texture_creator)?;
-        view.header_textures.build_textures(&view.texture_creator)?;
-        video_subsystem.text_input().start();
-
-        Ok(view)
-    }
-
-    /// Handle events from the global event_pump.
-    pub fn handle_event(&mut self, event: &Event) {
-        match event {
-            Event::MouseMotion { x, y, .. } => {
-                self.egui_events
-                    .push(EguiEvent::PointerMoved(pos2(*x as f32, *y as f32)));
-                if self.egui_wants_pointer {
-                    return;
-                }
-                self.hover = cell_from_point(*x, *y);
-            }
-            Event::MouseButtonDown {
-                x, y, mouse_btn, ..
-            } if *mouse_btn == MouseButton::Left => {
-                if *mouse_btn == MouseButton::Left {
-                    self.egui_events.push(EguiEvent::PointerButton {
-                        pos: pos2(*x as f32, *y as f32),
-                        button: egui::PointerButton::Primary,
-                        pressed: true,
-                        modifiers: self.egui_modifiers,
-                    });
-                }
-                if self.egui_wants_pointer {
-                    return;
-                }
-                if let Some((row, col)) = cell_from_point(*x, *y) {
-                    self.select_cell(row, col);
-                }
-            }
-            Event::MouseButtonUp {
-                x, y, mouse_btn, ..
-            } => {
-                if *mouse_btn == MouseButton::Left {
-                    self.egui_events.push(EguiEvent::PointerButton {
-                        pos: pos2(*x as f32, *y as f32),
-                        button: egui::PointerButton::Primary,
-                        pressed: false,
-                        modifiers: self.egui_modifiers,
-                    });
-                }
-            }
-            Event::Window {
-                win_event: WindowEvent::Leave,
-                ..
-            } => {
-                self.egui_events.push(EguiEvent::PointerGone);
-                self.hover = None;
-            }
-            Event::KeyDown {
-                keycode: Some(key),
-                keymod,
-                ..
-            } => {
-                self.egui_modifiers = to_egui_modifiers(*keymod);
-                if let Some(event) = to_egui_key_event(*key, true, self.egui_modifiers) {
-                    self.egui_events.push(event);
-                }
-                if !self.egui_wants_keyboard {
-                    self.handle_key(*key);
-                }
-            }
-            Event::KeyUp {
-                keycode: Some(key),
-                keymod,
-                ..
-            } => {
-                self.egui_modifiers = to_egui_modifiers(*keymod);
-                if let Some(event) = to_egui_key_event(*key, false, self.egui_modifiers) {
-                    self.egui_events.push(event);
-                }
-            }
-            Event::TextInput { text, .. } => {
-                self.egui_events.push(EguiEvent::Text(text.clone()));
-            }
-            _ => {}
+            selected: (0, 0),
+            breakpoint_cell: None,
+            breakpoint_value: None,
         }
     }
 
-    /// Draw the view.
-    pub fn draw(&mut self, bus: &Bus) -> Result<(), String> {
-        self.draw_memory_cells(&bus)?;
-        self.draw_headers()?;
-        self.draw_sidebar()?;
-        self.canvas.borrow_mut().present();
-        Ok(())
-    }
+    /// Render the zero page widget using egui immediate mode.
+    pub fn widget(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+        let mut open = self.open;
 
-    /// Draw the background and the memory value of each memory "cell" in the zero page.
-    fn draw_memory_cells(&mut self, bus: &Bus) -> Result<(), String> {
-        for index in 0..ZERO_PAGE_BYTES {
-            let byte = bus.read_u8(index);
-            let mut canvas = self.canvas.borrow_mut();
-            let col = (index as u32 % ZERO_PAGE_SIDE as u32) as u8;
-            let row = (index as u32 / ZERO_PAGE_SIDE as u32) as u8;
-            let x = col as u32 * CELL_SCALE + HEADER_SIZE;
-            let y = row as u32 * CELL_SCALE + HEADER_SIZE;
-
-            // Fill in the background.
-            let mut color = byte_to_color(byte);
-            let dim = dim_factor(self.hover, self.selected, row as u8, col as u8);
-            apply_dim(&mut color, dim);
-            canvas.set_draw_color(color);
-            canvas
-                .fill_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
-                .map_err(|e| e.to_string())?;
-
-            // Draw a border.
-            canvas.set_draw_color(Color::RGB(0, 0, 0));
-            canvas
-                .draw_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
-                .map_err(|e| e.to_string())?;
-
-            // Draw the value.
-            let texture = self.hex_textures.get(byte);
-            let target = Rect::new(
-                (x + CELL_PADDING) as i32,
-                (y + CELL_PADDING) as i32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-            );
-            canvas.copy(&texture, None, Some(target))?;
-
-            // Dim overlay (covers both background and text).
-            if dim < 1.0 {
-                let alpha = ((1.0 - dim) * 255.0) as u8;
-                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
-                canvas
-                    .fill_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
-                    .map_err(|e| e.to_string())?;
-            }
-
-            // Highlight selected cell with white border.
-            if let Some((sr, sc)) = self.selected {
-                if sr == row && sc == col {
-                    canvas.set_draw_color(Color::RGB(255, 255, 255));
-                    canvas
-                        .draw_rect(Rect::new(x as i32, y as i32, CELL_SCALE, CELL_SCALE))
-                        .map_err(|e| e.to_string())?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Draw the address headers for rows and columns.
-    fn draw_headers(&mut self) -> Result<(), String> {
-        let mut canvas = self.canvas.borrow_mut();
-
-        // Fill header backgrounds.
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas
-            .fill_rect(Rect::new(0, 0, GRID_WIDTH, HEADER_SIZE))
-            .map_err(|e| e.to_string())?;
-        canvas
-            .fill_rect(Rect::new(0, 0, HEADER_SIZE, WINDOW_HEIGHT))
-            .map_err(|e| e.to_string())?;
-
-        // Draw single separating lines
-        canvas.set_draw_color(Color::RGB(255, 255, 255));
-        canvas
-            .draw_line(
-                (HEADER_SIZE as i32, HEADER_SIZE as i32),
-                (GRID_WIDTH as i32, HEADER_SIZE as i32),
-            )
-            .map_err(|e| e.to_string())?;
-        canvas
-            .draw_line(
-                (HEADER_SIZE as i32, HEADER_SIZE as i32),
-                (HEADER_SIZE as i32, WINDOW_HEIGHT as i32),
-            )
-            .map_err(|e| e.to_string())?;
-
-        // Top header row.
-        for col in 0..ZERO_PAGE_SIDE {
-            let x = (HEADER_SIZE + col as u32 * CELL_SCALE) as i32;
-            let y = 0i32;
-
-            let texture = self.header_textures.top(col as u8);
-            let target = Rect::new(
-                x + CELL_PADDING as i32,
-                y + CELL_PADDING as i32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-            );
-            canvas.copy(texture, None, Some(target))?;
-
-            // Dim overlay for header cell.
-            let dim = dim_factor_top(self.hover, self.selected, col as u8);
-            if dim < 1.0 {
-                let alpha = ((1.0 - dim) * 255.0) as u8;
-                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
-                canvas
-                    .fill_rect(Rect::new(x, y, CELL_SCALE, CELL_SCALE))
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-
-        // Left header column.
-        for row in 0..ZERO_PAGE_SIDE {
-            let x = 0i32;
-            let y = (HEADER_SIZE + row as u32 * CELL_SCALE) as i32;
-
-            let texture = self.header_textures.side(row as u8);
-            let target = Rect::new(
-                x + CELL_PADDING as i32,
-                y + CELL_PADDING as i32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-                (CELL_SCALE - CELL_PADDING * 2) as u32,
-            );
-            canvas.copy(texture, None, Some(target))?;
-
-            // Dim overlay for header cell.
-            let dim = dim_factor_side(self.hover, self.selected, row as u8);
-            if dim < 1.0 {
-                let alpha = ((1.0 - dim) * 255.0) as u8;
-                canvas.set_draw_color(Color::RGBA(0, 0, 0, alpha));
-                canvas
-                    .fill_rect(Rect::new(x, y, CELL_SCALE, CELL_SCALE))
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn draw_sidebar(&mut self) -> Result<(), String> {
-        {
-            let mut canvas = self.canvas.borrow_mut();
-
-            // Sidebar background.
-            canvas.set_draw_color(Color::RGB(24, 24, 24));
-            canvas
-                .fill_rect(Rect::new(
-                    GRID_WIDTH as i32,
-                    0,
-                    SIDEBAR_WIDTH,
-                    WINDOW_HEIGHT,
-                ))
-                .map_err(|e| e.to_string())?;
-
-            // Separator line between grid and sidebar.
-            canvas.set_draw_color(Color::RGB(255, 255, 255));
-            canvas
-                .draw_line(
-                    (GRID_WIDTH as i32, 0),
-                    (GRID_WIDTH as i32, WINDOW_HEIGHT as i32),
-                )
-                .map_err(|e| e.to_string())?;
-        }
-
-        self.draw_sidebar_ui()
-    }
-
-    fn draw_sidebar_ui(&mut self) -> Result<(), String> {
-        let viewports = std::iter::once((
-            egui::ViewportId::ROOT,
-            egui::ViewportInfo {
-                native_pixels_per_point: Some(PIXEL_RATIO),
-                ..Default::default()
-            },
-        ))
-        .collect();
-        let raw_input = egui::RawInput {
-            viewports,
-            screen_rect: Some(egui::Rect::from_min_size(
-                pos2(0.0, 0.0),
-                egui::vec2(
-                    WINDOW_WIDTH as f32 / PIXEL_RATIO,
-                    WINDOW_HEIGHT as f32 / PIXEL_RATIO,
-                ),
-            )),
-            modifiers: self.egui_modifiers,
-            events: std::mem::take(&mut self.egui_events),
-            ..Default::default()
-        };
-
-        let egui_ctx = self.egui_ctx.clone();
-        let sidebar_text = &mut self.sidebar_text;
-        let sidebar_focused = &mut self.sidebar_focused;
-
-        let _ = egui_ctx.run(raw_input, |ctx| {
-            egui::Area::new("sidebar".into())
-                .fixed_pos(pos2(GRID_WIDTH as f32, 0.0))
-                .show(ctx, |ui| {
-                    ui.set_width(SIDEBAR_WIDTH as f32);
-                    ui.heading("Zero Page");
-                    ui.separator();
-                    ui.label("Notes");
-                    let response = ui.text_edit_singleline(sidebar_text);
-                    if response.gained_focus() {
-                        response.request_focus();
-                    }
-                    if response.has_focus() {
-                        ui.ctx().request_repaint();
-                    }
-                    *sidebar_focused = response.has_focus();
+        egui::Window::new("Zero Page")
+            .open(&mut open)
+            .collapsible(false)
+            .auto_sized()
+            .show(ui.ctx(), |ui| {
+                self.handle_keyboard(ui);
+                ui.horizontal(|ui| {
+                    self.memory_grid(ui, zero_page);
+                    self.sidebar(ui, zero_page);
                 });
-        });
+            });
 
-        self.egui_wants_keyboard = egui_ctx.wants_keyboard_input();
-        self.egui_wants_pointer = egui_ctx.wants_pointer_input();
-
-        self.draw_sidebar_textbox()?;
-        Ok(())
+        self.open = open;
     }
 
-    fn draw_sidebar_textbox(&mut self) -> Result<(), String> {
-        let padding = 10;
-        let text_padding = 6;
-        let heading_y = 12;
-        let textbox_height = 28;
+    /// Draw the memory grid, a 16x16 visualization of the zero page memory.
+    fn memory_grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+        const ZERO_PAGE_SIDE: usize = 16;
+        const CELL: f32 = 30.0;
+        const HEADER: f32 = 30.0;
+        const UNSELECTED_DIM: f32 = 0.8;
+        const UNSELECTED_DIM_HOVERED: f32 = 0.9;
+        const DIM_1: f32 = 0.9;
+        const DIM_2: f32 = 0.8;
+        const CELL_RADIUS: f32 = 2.0;
 
-        let Some(label_texture) =
-            self.render_text_texture("Notes", 18, Color::RGB(230, 230, 230))?
-        else {
-            return Ok(());
-        };
-        let label_query = label_texture.query();
+        let grid_width = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
+        let grid_height = (ZERO_PAGE_SIDE as f32 + 1.0) * CELL;
 
-        let x = GRID_WIDTH as i32 + padding;
-        let (label_w, label_h) = self.logical_texture_size(&label_query);
-        let label_rect = Rect::new(x, heading_y, label_w, label_h);
-
-        let textbox_y = heading_y + label_h as i32 + 8;
-        let textbox_rect = Rect::new(
-            x,
-            textbox_y,
-            SIDEBAR_WIDTH - (padding as u32 * 2),
-            textbox_height,
-        );
-
-        let mut canvas = self.canvas.borrow_mut();
-        canvas.copy(&label_texture, None, Some(label_rect))?;
-
-        canvas.set_draw_color(Color::RGB(40, 40, 40));
-        canvas.fill_rect(textbox_rect)?;
-        let border_color = if self.sidebar_focused {
-            Color::RGB(255, 255, 255)
-        } else {
-            Color::RGB(140, 140, 140)
-        };
-        canvas.set_draw_color(border_color);
-        canvas.draw_rect(textbox_rect)?;
-
-        if !self.sidebar_text.is_empty() {
-            if let Some(text_texture) = self.render_text_texture(
-                &self.sidebar_text,
-                18,
-                Color::RGB(230, 230, 230),
-            )? {
-                let query = text_texture.query();
-                let (text_w, text_h) = self.logical_texture_size(&query);
-                let text_rect = Rect::new(
-                    x + text_padding,
-                    textbox_y + (textbox_height as i32 - text_h as i32) / 2,
-                    text_w,
-                    text_h,
+        ui.group(|ui| {
+            ui.vertical(|ui| {
+                let (response, painter) = ui.allocate_painter(
+                    egui::vec2(grid_width, grid_height),
+                    egui::Sense::click_and_drag(),
                 );
-                canvas.copy(&text_texture, None, Some(text_rect))?;
+                let rect = response.rect;
+
+                // Fill the background.
+                painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+
+                let grid_stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+
+                // Draw the grid.
+                for row in 0..=ZERO_PAGE_SIDE {
+                    let y = rect.min.y + HEADER + row as f32 * CELL;
+                    let start = egui::pos2(rect.min.x + HEADER, y);
+                    let end = egui::pos2(rect.max.x, y);
+                    painter.line_segment([start, end], grid_stroke);
+                }
+                for col in 0..=ZERO_PAGE_SIDE {
+                    let x = rect.min.x + HEADER + col as f32 * CELL;
+                    let start = egui::pos2(x, rect.min.y + HEADER);
+                    let end = egui::pos2(x, rect.max.y);
+                    painter.line_segment([start, end], grid_stroke);
+                }
+
+                // Draw the header labels.
+                for col in 0..ZERO_PAGE_SIDE {
+                    let label = format!("x{col:01X}");
+                    let dim = dim_factor_top(self.hover, self.selected, col as u8, DIM_2);
+                    let color = color_with_dim(ui.visuals().strong_text_color(), dim);
+                    let pos = egui::pos2(
+                        rect.min.x + HEADER + col as f32 * CELL + CELL * 0.5,
+                        rect.min.y + HEADER * 0.5,
+                    );
+                    painter.text(
+                        pos,
+                        egui::Align2::CENTER_CENTER,
+                        label,
+                        egui::TextStyle::Monospace.resolve(ui.style()),
+                        color,
+                    );
+                }
+
+                // Draw the column labels.
+                for row in 0..ZERO_PAGE_SIDE {
+                    let label = format!("{row:01X}x");
+                    let dim =
+                        dim_factor_side(self.hover, self.selected, row as u8, DIM_2);
+                    let color = color_with_dim(ui.visuals().strong_text_color(), dim);
+                    let pos = egui::pos2(
+                        rect.min.x + HEADER * 0.5,
+                        rect.min.y + HEADER + row as f32 * CELL + CELL * 0.5,
+                    );
+                    painter.text(
+                        pos,
+                        egui::Align2::CENTER_CENTER,
+                        label,
+                        egui::TextStyle::Monospace.resolve(ui.style()),
+                        color,
+                    );
+                }
+
+                if let Some(values) = zero_page {
+                    for row in 0..ZERO_PAGE_SIDE {
+                        for col in 0..ZERO_PAGE_SIDE {
+                            let index = row * ZERO_PAGE_SIDE + col;
+                            let byte = values[index];
+                            let cell_rect = egui::Rect::from_min_size(
+                                egui::pos2(
+                                    rect.min.x + HEADER + col as f32 * CELL,
+                                    rect.min.y + HEADER + row as f32 * CELL,
+                                ),
+                                egui::vec2(CELL, CELL),
+                            );
+
+                            let dim = dim_factor(
+                                self.hover,
+                                self.selected,
+                                row as u8,
+                                col as u8,
+                                DIM_1,
+                                DIM_2,
+                                UNSELECTED_DIM,
+                                UNSELECTED_DIM_HOVERED,
+                            );
+                            let text_color =
+                                color_with_dim(ui.visuals().strong_text_color(), dim);
+
+                            let cell_color = color_with_dim(
+                                byte_to_color(byte),
+                                dim.max(UNSELECTED_DIM),
+                            );
+                            painter.rect_filled(cell_rect, CELL_RADIUS, cell_color);
+
+                            let stroke = if self.selected == (row as u8, col as u8) {
+                                egui::Stroke {
+                                    width: 2.0,
+                                    color: egui::Color32::WHITE,
+                                }
+                            } else if self.hover == Some((row as u8, col as u8)) {
+                                egui::Stroke {
+                                    width: 1.5,
+                                    color: ui.visuals().widgets.hovered.fg_stroke.color,
+                                }
+                            } else {
+                                egui::Stroke::NONE
+                            };
+
+                            if stroke.width > 0.0 {
+                                painter.rect_stroke(
+                                    cell_rect,
+                                    CELL_RADIUS,
+                                    stroke,
+                                    egui::StrokeKind::Inside,
+                                );
+                            }
+
+                            // Draw the breakpoint outline.
+                            let breakpoint = self.breakpoint_cell.or_else(|| {
+                                self.breakpoint_value.map(|(r, c, _)| (r, c))
+                            });
+                            if let Some((breakpoint_row, breakpoint_column)) = breakpoint
+                            {
+                                if breakpoint_row == row as u8
+                                    && breakpoint_column == col as u8
+                                {
+                                    painter.rect_stroke(
+                                        cell_rect.shrink(2.0),
+                                        CELL_RADIUS,
+                                        egui::Stroke {
+                                            width: 1.5,
+                                            color: egui::Color32::from_rgb(255, 165, 0),
+                                        },
+                                        egui::StrokeKind::Inside,
+                                    );
+                                }
+                            }
+
+                            // Draw the text, e.g. "2F", "00", "1E"
+                            painter.text(
+                                cell_rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                format!("{byte:02X}"),
+                                egui::TextStyle::Monospace.resolve(ui.style()),
+                                text_color,
+                            );
+                        }
+                    }
+                }
+
+                // Hover + selection mapping
+                if let Some(position) = response.hover_pos() {
+                    self.hover = position_to_cell(
+                        position,
+                        rect.min,
+                        HEADER,
+                        CELL,
+                        ZERO_PAGE_SIDE,
+                    );
+                } else {
+                    self.hover = None;
+                }
+
+                if response.clicked() {
+                    if let Some(position) = response.interact_pointer_pos() {
+                        if let Some(cell) = position_to_cell(
+                            position,
+                            rect.min,
+                            HEADER,
+                            CELL,
+                            ZERO_PAGE_SIDE,
+                        ) {
+                            self.selected = cell;
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // Handle egui keyboard events when this window is open.
+    fn handle_keyboard(&mut self, ui: &mut egui::Ui) {
+        ui.input(|input| {
+            for event in &input.events {
+                if let egui::Event::Key {
+                    key, pressed: true, ..
+                } = event
+                {
+                    match key {
+                        egui::Key::ArrowUp => self.change_selection(0, -1),
+                        egui::Key::ArrowDown => self.change_selection(0, 1),
+                        egui::Key::ArrowLeft => self.change_selection(-1, 0),
+                        egui::Key::ArrowRight => self.change_selection(1, 0),
+                        _ => {}
+                    }
+                }
             }
-        }
-
-        Ok(())
+        });
     }
 
-    fn render_text_texture(
-        &self,
-        text: &str,
-        size: u16,
-        color: Color,
-    ) -> Result<Option<Texture>, String> {
-        if text.is_empty() {
-            return Ok(None);
-        }
-
-        let size = (size as f32 * PIXEL_RATIO).round().max(1.0) as u16;
-        let ttf_context = ttf::init().map_err(|e| e.to_string())?;
-        let font = ttf_context
-            .load_font("assets/liberation_mono/LiberationMono-Regular.ttf", size)
-            .map_err(|e| e.to_string())?;
-
-        let surface = font
-            .render(text)
-            .blended(color)
-            .map_err(|e| e.to_string())?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(|e| e.to_string())?;
-        Ok(Some(texture))
+    /// Move the grid selection from an arrow key press.
+    fn change_selection(&mut self, dx: i8, dy: i8) {
+        const ZERO_PAGE_SIDE: i8 = 16;
+        let (row, col) = self.selected;
+        let mut new_col = col as i8 + dx;
+        let mut new_row = row as i8 + dy;
+        new_col = new_col.clamp(0, ZERO_PAGE_SIDE - 1);
+        new_row = new_row.clamp(0, ZERO_PAGE_SIDE - 1);
+        self.selected = (new_row as u8, new_col as u8);
     }
 
-    fn logical_texture_size(&self, query: &sdl2::render::TextureQuery) -> (u32, u32) {
-        (
-            (query.width as f32 / PIXEL_RATIO).round().max(1.0) as u32,
-            (query.height as f32 / PIXEL_RATIO).round().max(1.0) as u32,
-        )
-    }
+    /// Create the sidebar UI.
+    fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+        let zero_page = zero_page.expect("The zero page exists");
 
-    fn select_cell(&mut self, row: u8, col: u8) {
-        if self.selected == Some((row, col)) {
-            return;
-        }
-        self.selected = Some((row, col));
-        let addr = row as u16 * ZERO_PAGE_SIDE as u16 + col as u16;
-        println!(
-            "Selected zero page cell {:02X} (row {}, col {})",
-            addr, row, col
-        );
-    }
+        ui.vertical(|ui| {
+            ui.group(|ui| {
+                // Draw the value information.
+                let (row, col) = self.selected;
+                let address: u16 = (row as u16) * 0x10 + col as u16;
+                let value = {
+                    let (row, col) = self.selected;
+                    let idx = (row as usize) * 16 + col as usize;
+                    zero_page
+                        .get(idx)
+                        .expect("Out of bounds access on the zero_page.")
+                };
 
-    fn handle_key(&mut self, key: Keycode) {
-        match key {
-            Keycode::Up => self.change_selection(-1, 0),
-            Keycode::Down => self.change_selection(1, 0),
-            Keycode::Left => self.change_selection(0, -1),
-            Keycode::Right => self.change_selection(0, 1),
-            Keycode::Escape => {
-                self.selected = None;
-            }
-            _ => return,
-        }
-    }
+                ui.monospace(format!("Address ${address:02X}"));
+                ui.monospace(format!("Hex     ${}", format!("0x{value:02X}")));
+                ui.monospace(format!("Decimal {}", format!("{value}")));
+                ui.monospace(format!("Binary  {}", format_as_bits(*value)));
 
-    fn change_selection(&mut self, d_row: i32, d_col: i32) {
-        let (row0, col0) = self.selected.or(self.hover).unwrap_or((0u8, 0u8));
-        let mut row = row0 as i32 + d_row;
-        let mut col = col0 as i32 + d_col;
+                ui.separator();
 
-        row = row.clamp(0, ZERO_PAGE_SIDE as i32 - 1);
-        col = col.clamp(0, ZERO_PAGE_SIDE as i32 - 1);
+                // Compute the breakpoint display state.
+                let mut is_breakpoint_cell = self.breakpoint_cell == Some(self.selected);
+                let mut is_breakpoint_value = self
+                    .breakpoint_value
+                    .map(|(r, c, _)| Some((r, c)) == Some(self.selected))
+                    .unwrap_or(false);
+                let mut target_value: u8 = self
+                    .breakpoint_value
+                    .and_then(|(_, _, v)| Some(v))
+                    .unwrap_or(0);
 
-        self.select_cell(row as u8, col as u8);
+                // Draw the breakpoints.
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut is_breakpoint_cell, "Breakpoint").clicked() {
+                        if is_breakpoint_cell {
+                            self.breakpoint_cell = Some(self.selected);
+                            self.breakpoint_value = None;
+                        } else {
+                            self.breakpoint_cell = None;
+                        }
+                    }
+
+                    if ui
+                        .checkbox(&mut is_breakpoint_value, "Break on value")
+                        .clicked()
+                    {
+                        if is_breakpoint_value {
+                            let (row, col) = self.selected;
+                            self.breakpoint_value = Some((row, col, target_value));
+                            self.breakpoint_cell = None;
+                        } else {
+                            self.breakpoint_value = None;
+                        }
+                    }
+                });
+
+                if is_breakpoint_value {
+                    ui.horizontal(|ui| {
+                        ui.label("Target value (hex):");
+                        let mut value_str = format!("{target_value:02X}");
+                        if ui.text_edit_singleline(&mut value_str).changed() {
+                            if let Ok(val) = u8::from_str_radix(value_str.trim(), 16) {
+                                target_value = val;
+                                let (row, col) = self.selected;
+                                self.breakpoint_value = Some((row, col, target_value));
+                            }
+                        }
+                    });
+                }
+            });
+        });
     }
 }
 
-/// Codegened utility to convert a byte value into a representative color.
-fn byte_to_color(byte: u8) -> Color {
+/// Take an egui position and map it to a cell position.
+fn position_to_cell(
+    pos: egui::Pos2,
+    rect_min: egui::Pos2,
+    header: f32,
+    cell: f32,
+    side: usize,
+) -> Option<(u8, u8)> {
+    let local = pos - rect_min;
+    if local.x < header || local.y < header {
+        return None;
+    }
+    let col = ((local.x - header) / cell).floor() as i32;
+    let row = ((local.y - header) / cell).floor() as i32;
+    if row >= 0 && row < side as i32 && col >= 0 && col < side as i32 {
+        Some((row as u8, col as u8))
+    } else {
+        None
+    }
+}
+
+// Apply a dim factor the hex cells.
+fn dim_factor(
+    hover: Option<(u8, u8)>,
+    selected: (u8, u8),
+    row: u8,
+    col: u8,
+    dim_1: f32,
+    dim_2: f32,
+    unselected_dim: f32,
+    unselected_dim_hovered: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((hover_row, hover_col)) => {
+            if hover_row == row && hover_col == col {
+                1.0
+            } else if hover_row == row || hover_col == col {
+                dim_1
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    let (selected_row, selected_col) = selected;
+    if selected_row == row && selected_col == col {
+        return 1.0;
+    }
+    if hover.is_some() {
+        factor *= unselected_dim_hovered;
+    } else {
+        factor *= unselected_dim;
+    }
+
+    factor
+}
+
+// Apply a dim factor to the top cells.
+fn dim_factor_top(
+    hover: Option<(u8, u8)>,
+    selected: (u8, u8),
+    col: u8,
+    dim_2: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((_, hc)) => {
+            if hc == col {
+                1.0
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    if selected.1 == col {
+        return 1.0;
+    }
+    factor *= 0.9;
+
+    factor
+}
+
+// Apply a dim factor to the side.
+fn dim_factor_side(
+    hover: Option<(u8, u8)>,
+    selected: (u8, u8),
+    row: u8,
+    dim_2: f32,
+) -> f32 {
+    let mut factor = match hover {
+        None => 1.0,
+        Some((hr, _)) => {
+            if hr == row {
+                1.0
+            } else {
+                dim_2
+            }
+        }
+    };
+
+    let (selected_row, _) = selected;
+    if selected_row == row {
+        return 1.0;
+    }
+    factor *= 0.9;
+
+    factor
+}
+
+fn color_with_dim(color: egui::Color32, factor: f32) -> egui::Color32 {
+    let [r, g, b, a] = color.to_array();
+    let scale = |v: u8| ((v as f32) * factor).clamp(0.0, 255.0) as u8;
+    egui::Color32::from_rgba_premultiplied(scale(r), scale(g), scale(b), a)
+}
+
+fn byte_to_color(byte: u8) -> egui::Color32 {
     let hue_deg = (byte as f32 / 255.0) * 120.0 + 210.0;
     let s = 0.8;
-    // Keep it fairly dark; add a tiny variation from the low 3 bits
     let v = 0.35 + ((byte & 0b0000_0111) as f32 / 7.0) * 0.10;
     let (r, g, b) = hsv_to_rgb(hue_deg, s, v);
-    Color::RGB(r, g, b)
+    egui::Color32::from_rgb(r, g, b)
 }
 
-/// Codegened utility to convert the color value.
 fn hsv_to_rgb(mut h: f32, s: f32, v: f32) -> (u8, u8, u8) {
-    // h in [0,360), s,v in [0,1]
     h = h % 360.0;
     let c = v * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
@@ -579,251 +500,8 @@ fn hsv_to_rgb(mut h: f32, s: f32, v: f32) -> (u8, u8, u8) {
     (to_u8(rp), to_u8(gp), to_u8(bp))
 }
 
-/// This struct retains the textures for the memory representations. It's technically
-/// unsafe as the texture's lifetime is bounded to the texture_creator, but the lifetimes
-/// were a mess with self-referential structures so I gave up on it and use the unsafe
-/// lifetimes.
-#[derive(Default)]
-struct HexTextures {
-    textures: Vec<Texture>,
-}
-
-impl HexTextures {
-    pub fn build_textures(
-        &mut self,
-        texture_creator: &TextureCreator<WindowContext>,
-    ) -> Result<(), String> {
-        let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
-        let font = ttf_context.load_font(
-            "assets/liberation_mono/LiberationMono-Regular.ttf",
-            HEX_FONT_SIZE,
-        )?;
-
-        for value in 0u8..=255u8 {
-            let label = format!("{:02X}", value); // e.g. "0A", "FF"
-            let surface = font
-                .render(&label)
-                .blended(Color::RGB(255, 255, 255))
-                .map_err(|e| e.to_string())?;
-            let texture = texture_creator
-                .create_texture_from_surface(&surface)
-                .map_err(|e| e.to_string())?;
-            self.textures.push(texture);
-        }
-
-        Ok(())
-    }
-
-    pub fn get(&self, value: u8) -> &Texture {
-        &self.textures[value as usize]
-    }
-}
-
-/// Contains the textures for the header.
-///   top:  x0 x1 x2 ... xf
-///   side: 0x 1x 2x ... fx
-#[derive(Default)]
-struct HeaderTextures {
-    top: Vec<Texture>,
-    side: Vec<Texture>,
-}
-
-impl HeaderTextures {
-    pub fn build_textures(
-        &mut self,
-        texture_creator: &TextureCreator<WindowContext>,
-    ) -> Result<(), String> {
-        let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
-        let font = ttf_context.load_font(
-            "assets/liberation_mono/LiberationMono-Regular.ttf",
-            HEX_FONT_SIZE,
-        )?;
-
-        for col in 0u8..ZERO_PAGE_SIDE as u8 {
-            let label = format!("x{:X}", col);
-            let surface = font
-                .render(&label)
-                .blended(Color::RGB(255, 255, 255))
-                .map_err(|e| e.to_string())?;
-            let texture = texture_creator
-                .create_texture_from_surface(&surface)
-                .map_err(|e| e.to_string())?;
-            self.top.push(texture);
-        }
-
-        for row in 0u8..ZERO_PAGE_SIDE as u8 {
-            let label = format!("{:X}x", row);
-            let surface = font
-                .render(&label)
-                .blended(Color::RGB(255, 255, 255))
-                .map_err(|e| e.to_string())?;
-            let texture = texture_creator
-                .create_texture_from_surface(&surface)
-                .map_err(|e| e.to_string())?;
-            self.side.push(texture);
-        }
-
-        Ok(())
-    }
-
-    pub fn top(&self, index: u8) -> &Texture {
-        &self.top[index as usize]
-    }
-
-    pub fn side(&self, index: u8) -> &Texture {
-        &self.side[index as usize]
-    }
-}
-
-fn dim_factor(
-    hover: Option<(u8, u8)>,
-    selected: Option<(u8, u8)>,
-    row: u8,
-    col: u8,
-) -> f32 {
-    let mut factor = match hover {
-        None => 1.0,
-        Some((hover_row, hover_col)) => {
-            if hover_row == row && hover_col == col {
-                // This cell is hovered.
-                1.0
-            } else if hover_row == row || hover_col == col {
-                // This cell is in a row or column.
-                DIM_1
-            } else {
-                // This cell is dimmed.
-                DIM_2
-            }
-        }
-    };
-
-    if let Some((selected_row, selected_col)) = selected {
-        if selected_row == row && selected_col == col {
-            return 1.0;
-        }
-
-        // Slightly dim all other cells when a selection is present.
-        if hover.is_some() {
-            factor *= UNSELECTED_DIM_HOVERED;
-        } else {
-            factor *= UNSELECTED_DIM;
-        }
-    }
-
-    factor
-}
-
-fn dim_factor_top(hover: Option<(u8, u8)>, selected: Option<(u8, u8)>, col: u8) -> f32 {
-    let mut factor = match hover {
-        None => 1.0,
-        Some((_, hc)) => {
-            if hc == col {
-                1.0
-            } else {
-                DIM_2
-            }
-        }
-    };
-
-    if let Some((_, selected_col)) = selected {
-        if selected_col == col {
-            return 1.0;
-        }
-        factor *= UNSELECTED_DIM_HOVERED;
-    }
-
-    factor
-}
-
-fn dim_factor_side(hover: Option<(u8, u8)>, selected: Option<(u8, u8)>, row: u8) -> f32 {
-    let mut factor = match hover {
-        None => 1.0,
-        Some((hr, _)) => {
-            if hr == row {
-                1.0
-            } else {
-                DIM_2
-            }
-        }
-    };
-
-    if let Some((selected_row, _)) = selected {
-        if selected_row == row {
-            return 1.0;
-        }
-        factor *= UNSELECTED_DIM_HOVERED;
-    }
-
-    factor
-}
-
-fn apply_dim(color: &mut Color, factor: f32) {
-    let scale = |v: u8| ((v as f32 * factor).round().clamp(0.0, 255.0)) as u8;
-    *color = Color::RGB(scale(color.r), scale(color.g), scale(color.b));
-}
-
-fn to_egui_modifiers(keymod: sdl2::keyboard::Mod) -> EguiModifiers {
-    EguiModifiers {
-        alt: keymod
-            .intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD),
-        ctrl: keymod
-            .intersects(sdl2::keyboard::Mod::LCTRLMOD | sdl2::keyboard::Mod::RCTRLMOD),
-        shift: keymod
-            .intersects(sdl2::keyboard::Mod::LSHIFTMOD | sdl2::keyboard::Mod::RSHIFTMOD),
-        mac_cmd: keymod
-            .intersects(sdl2::keyboard::Mod::LGUIMOD | sdl2::keyboard::Mod::RGUIMOD),
-        command: keymod
-            .intersects(sdl2::keyboard::Mod::LGUIMOD | sdl2::keyboard::Mod::RGUIMOD),
-    }
-}
-
-fn to_egui_key_event(
-    key: Keycode,
-    pressed: bool,
-    modifiers: EguiModifiers,
-) -> Option<EguiEvent> {
-    use egui::Key::*;
-
-    let key = match key {
-        Keycode::Tab => Tab,
-        Keycode::Backspace => Backspace,
-        Keycode::Return => Enter,
-        Keycode::Escape => Escape,
-        Keycode::Left => ArrowLeft,
-        Keycode::Right => ArrowRight,
-        Keycode::Up => ArrowUp,
-        Keycode::Down => ArrowDown,
-        Keycode::Home => Home,
-        Keycode::End => End,
-        Keycode::PageUp => PageUp,
-        Keycode::PageDown => PageDown,
-        _ => return None,
-    };
-
-    Some(EguiEvent::Key {
-        key,
-        pressed,
-        physical_key: None,
-        repeat: false,
-        modifiers,
-    })
-}
-
-fn cell_from_point(x: i32, y: i32) -> Option<(u8, u8)> {
-    // Translate from screen to grid.
-    let grid_x = x - HEADER_SIZE as i32;
-    let grid_y = y - HEADER_SIZE as i32;
-
-    if grid_x < 0 || grid_y < 0 {
-        return None;
-    }
-
-    let col = (grid_x as u32) / CELL_SCALE;
-    let row = (grid_y as u32) / CELL_SCALE;
-
-    if col < ZERO_PAGE_SIDE as u32 && row < ZERO_PAGE_SIDE as u32 {
-        Some((row as u8, col as u8))
-    } else {
-        None
-    }
+fn format_as_bits(b: u8) -> String {
+    let bits = format!("{:08b}", b); // "00111111"
+    let grouped = bits[..4].to_string() + "_" + &bits[4..]; // "0011_1111"
+    format!("0b{}", grouped)
 }
