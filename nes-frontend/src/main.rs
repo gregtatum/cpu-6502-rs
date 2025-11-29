@@ -3,7 +3,7 @@ pub mod instructions;
 pub mod zero_page;
 
 use crate::drivers::controller_sdl2::ControllerManager;
-use crate::instructions::InstructionsWindow;
+use crate::instructions::{InstructionsAction, InstructionsWindow};
 use crate::zero_page::ZeroPageWindow;
 use egui::FullOutput;
 use glow::HasContext;
@@ -146,8 +146,23 @@ impl NesFrontend {
                 zero_page_snapshot,
                 &self.nes_core.cpu,
                 Some(&self.address_to_label),
+                self.nes_core.is_breakpoint,
             );
             self.widgets.draw(&self.gl, &full_output, &self.window);
+
+            if let Some(action) = self.widgets.take_instruction_action() {
+                match action {
+                    InstructionsAction::StepInstruction => {
+                        self.nes_core.step_instruction();
+                    }
+                    InstructionsAction::Pause => {
+                        self.nes_core.is_breakpoint = true;
+                    }
+                    InstructionsAction::Resume => {
+                        self.nes_core.resume();
+                    }
+                }
+            }
 
             let elapsed = self.frame_timer.frame_secs();
             if elapsed < TARGET_FRAME_TIME {
@@ -442,6 +457,7 @@ impl Widgets {
         zero_page_snapshot: Option<[u8; 256]>,
         cpu: &nes_core::cpu_6502::Cpu6502,
         address_to_label: Option<&AddressToLabel>,
+        is_breakpoint: bool,
     ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
         let (logical_width, logical_height) = window.size();
@@ -471,8 +487,12 @@ impl Widgets {
             egui::CentralPanel::default().show(ctx, |ui| {
                 zero_page_new.widget(ui, zero_page_snapshot.as_deref());
             });
-            instructions.widget(ctx, cpu, address_to_label);
+            instructions.widget(ctx, cpu, address_to_label, is_breakpoint);
         })
+    }
+
+    fn take_instruction_action(&mut self) -> Option<InstructionsAction> {
+        self.instructions.take_action()
     }
 
     fn draw(&mut self, gl: &glow::Context, full_output: &FullOutput, window: &Window) {

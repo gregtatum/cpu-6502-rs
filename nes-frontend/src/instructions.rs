@@ -10,9 +10,16 @@ use nes_core::{
 const HISTORY_LIMIT: usize = 24;
 const UPCOMING_LIMIT: usize = 16;
 
+pub enum InstructionsAction {
+    StepInstruction,
+    Pause,
+    Resume,
+}
+
 pub struct InstructionsWindow {
     open: bool,
     executed_instructions: VecDeque<String>,
+    pending_action: Option<InstructionsAction>,
 }
 
 impl InstructionsWindow {
@@ -20,7 +27,12 @@ impl InstructionsWindow {
         Self {
             open: true,
             executed_instructions: VecDeque::new(),
+            pending_action: None,
         }
+    }
+
+    pub fn take_action(&mut self) -> Option<InstructionsAction> {
+        self.pending_action.take()
     }
 
     pub fn widget(
@@ -28,12 +40,30 @@ impl InstructionsWindow {
         ctx: &egui::Context,
         cpu: &Cpu6502,
         address_to_label: Option<&AddressToLabel>,
+        is_breakpoint: bool,
     ) {
         let mut open = self.open;
         egui::Window::new("Instructions")
             .open(&mut open)
             .collapsible(false)
             .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    let status = if is_breakpoint { "Paused" } else { "Running" };
+                    ui.label(RichText::new(status).monospace());
+
+                    if is_breakpoint {
+                        if ui.button("Resume").clicked() {
+                            self.pending_action = Some(InstructionsAction::Resume);
+                        }
+                        if ui.button("Step").clicked() {
+                            self.pending_action =
+                                Some(InstructionsAction::StepInstruction);
+                        }
+                    } else if ui.button("Pause").clicked() {
+                        self.pending_action = Some(InstructionsAction::Pause);
+                    }
+                });
+
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let entries = decode_instructions(
                         cpu,
