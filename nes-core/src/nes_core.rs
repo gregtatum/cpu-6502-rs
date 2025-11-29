@@ -17,6 +17,9 @@ const CPU_TICKS_PER_FRAME: u64 = (NTSC_CPU_HZ / NTSC_FRAME_RATE) as u64;
 pub struct NesCore {
     pub bus: SharedBus,
     pub cpu: Cpu6502,
+    /// Indicates whether the CPU should halt at the current instruction (breakpoint).
+    /// Defaults to true so consumers can begin in a paused/stepping state.
+    pub is_breakpoint: bool,
 }
 
 impl NesCore {
@@ -26,6 +29,7 @@ impl NesCore {
             cpu: Cpu6502::new(Rc::clone(&bus)),
             // Take ownership of the initial bus.
             bus,
+            is_breakpoint: true,
         }
     }
 
