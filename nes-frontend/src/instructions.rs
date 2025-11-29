@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use sdl2::keyboard::Keycode;
+
 use egui::RichText;
 use nes_core::{
     asm::AddressToLabel,
@@ -12,6 +14,7 @@ const UPCOMING_LIMIT: usize = 16;
 
 pub enum InstructionsAction {
     StepInstruction,
+    StepMany(u32),
     Pause,
     Resume,
 }
@@ -31,8 +34,57 @@ impl InstructionsWindow {
         }
     }
 
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     pub fn take_action(&mut self) -> Option<InstructionsAction> {
         self.pending_action.take()
+    }
+
+    /// Handle keyboard shortcuts while the instructions window is visible.
+    /// Only N/space/number keys are handled here.
+    pub fn handle_key(&mut self, keycode: Keycode, is_breakpoint: bool) -> bool {
+        match keycode {
+            Keycode::N => {
+                self.pending_action = Some(InstructionsAction::StepInstruction);
+                true
+            }
+            Keycode::Space => {
+                if is_breakpoint {
+                    self.pending_action = Some(InstructionsAction::Resume);
+                } else {
+                    self.pending_action = Some(InstructionsAction::Pause);
+                }
+                true
+            }
+            Keycode::Num1
+            | Keycode::Num2
+            | Keycode::Num3
+            | Keycode::Num4
+            | Keycode::Num5
+            | Keycode::Num6
+            | Keycode::Num7
+            | Keycode::Num8
+            | Keycode::Num9 => {
+                let digit = match keycode {
+                    Keycode::Num1 => 1,
+                    Keycode::Num2 => 2,
+                    Keycode::Num3 => 3,
+                    Keycode::Num4 => 4,
+                    Keycode::Num5 => 5,
+                    Keycode::Num6 => 6,
+                    Keycode::Num7 => 7,
+                    Keycode::Num8 => 8,
+                    Keycode::Num9 => 9,
+                    _ => unreachable!(),
+                };
+                let count = (digit + 1).pow(2) as u32;
+                self.pending_action = Some(InstructionsAction::StepMany(count));
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn widget(

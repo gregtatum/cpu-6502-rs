@@ -155,6 +155,13 @@ impl NesFrontend {
                     InstructionsAction::StepInstruction => {
                         self.nes_core.step_instruction();
                     }
+                    InstructionsAction::StepMany(count) => {
+                        for _ in 0..count {
+                            if let ExitReason::KIL = self.nes_core.step_instruction() {
+                                break;
+                            }
+                        }
+                    }
                     InstructionsAction::Pause => {
                         self.nes_core.is_breakpoint = true;
                     }
@@ -283,6 +290,7 @@ struct Widgets {
     input: egui::RawInput,
     zero_page: ZeroPageWindow,
     instructions: InstructionsWindow,
+    last_breakpoint_state: bool,
 }
 
 impl Widgets {
@@ -314,6 +322,7 @@ impl Widgets {
             input: Default::default(),
             zero_page: ZeroPageWindow::new(),
             instructions: InstructionsWindow::new(),
+            last_breakpoint_state: true,
         })
     }
 
@@ -338,6 +347,21 @@ impl Widgets {
                 if self.zero_page.grid_focused() {
                     self.zero_page.enqueue_key(key);
                 }
+                return;
+            }
+        }
+
+        // Handle instruction view shortcuts when the window is visible.
+        if let sdl2::event::Event::KeyDown {
+            keycode: Some(keycode),
+            ..
+        } = event
+        {
+            if self.instructions.is_open()
+                && self
+                    .instructions
+                    .handle_key(*keycode, self.last_breakpoint_state)
+            {
                 return;
             }
         }
@@ -483,6 +507,7 @@ impl Widgets {
         let zero_page_new = &mut self.zero_page;
         let instructions = &mut self.instructions;
         let zero_page_snapshot = zero_page_snapshot.map(Box::new);
+        self.last_breakpoint_state = is_breakpoint;
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 zero_page_new.widget(ui, zero_page_snapshot.as_deref());
