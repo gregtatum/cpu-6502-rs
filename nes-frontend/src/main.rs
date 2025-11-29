@@ -1,7 +1,9 @@
+pub mod breakpoints;
 pub mod drivers;
 pub mod instructions;
 pub mod zero_page;
 
+use crate::breakpoints::{is_breakpoint_hit, BreakpointMap};
 use crate::drivers::controller_sdl2::ControllerManager;
 use crate::instructions::{InstructionsAction, InstructionsWindow};
 use crate::zero_page::ZeroPageWindow;
@@ -34,6 +36,8 @@ struct NesFrontend {
     gl_context: sdl2::video::GLContext,
     window: Window,
     frame_timer: FrameTimer,
+    breakpoints: BreakpointMap,
+    last_zero_page: Option<[u8; 256]>,
 }
 
 impl NesFrontend {
@@ -55,6 +59,8 @@ impl NesFrontend {
             gl,
             gl_context,
             frame_timer: FrameTimer::new(),
+            breakpoints: BreakpointMap::default(),
+            last_zero_page: None,
         })
     }
 
@@ -130,16 +136,26 @@ impl NesFrontend {
             // What other integrations from SDL2 to egui do we want to support?
             // Clipboard, others?
 
-            let zero_page_snapshot = if self.widgets.zero_page_open() {
+            let mut current_zero_page = [0u8; 256];
+            {
                 let bus = self.nes_core.bus.borrow();
-                let mut data = [0u8; 256];
-                for (i, byte) in data.iter_mut().enumerate() {
+                for (i, byte) in current_zero_page.iter_mut().enumerate() {
                     *byte = bus.read_u8(i as u16);
                 }
-                Some(data)
+            }
+
+            let zero_page_snapshot = if self.widgets.zero_page_open() {
+                Some(current_zero_page.clone())
             } else {
                 None
             };
+
+            if !self.nes_core.is_stepping && self.check_breakpoints(&current_zero_page) {
+                self.nes_core.is_stepping = true;
+            }
+            self.last_zero_page = Some(current_zero_page.clone());
+
+            let zero_page_snapshot = zero_page_snapshot;
 
             let full_output = self.widgets.update(
                 &self.window,
@@ -148,6 +164,7 @@ impl NesFrontend {
                 &self.nes_core.cpu,
                 Some(&self.address_to_label),
                 self.nes_core.is_stepping,
+                &mut self.breakpoints,
             );
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
@@ -223,6 +240,21 @@ impl NesFrontend {
         }
 
         Ok(false)
+    }
+
+    fn check_breakpoints(&self, current_zero_page: &[u8; 256]) -> bool {
+        if let Some(previous) = &self.last_zero_page {
+            for (index, value) in current_zero_page.iter().enumerate() {
+                let address = index as u16;
+                if let Some(breakpoint) = self.breakpoints.get(&address) {
+                    let previous_value = previous[index];
+                    if is_breakpoint_hit(previous_value, *value, breakpoint) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
@@ -484,6 +516,7 @@ impl Widgets {
         cpu: &nes_core::cpu_6502::Cpu6502,
         address_to_label: Option<&AddressToLabel>,
         is_stepping: bool,
+        breakpoints: &mut BreakpointMap,
     ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
         let (logical_width, logical_height) = window.size();
@@ -512,7 +545,7 @@ impl Widgets {
         self.last_is_stepping = is_stepping;
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                zero_page_new.widget(ui, zero_page_snapshot.as_deref());
+                zero_page_new.widget(ui, zero_page_snapshot.as_deref(), breakpoints);
             });
             instructions.widget(ctx, cpu, address_to_label, is_stepping);
         })

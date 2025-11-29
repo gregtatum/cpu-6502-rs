@@ -1,3 +1,5 @@
+use crate::breakpoints::{Breakpoint, BreakpointMap};
+
 const SIDEBAR_WIDTH: f32 = 200.0;
 
 /// Create a Window that will visualize the zero page memory. The zero page memory
@@ -10,8 +12,6 @@ pub struct ZeroPageWindow {
     open: bool,
     hover: Option<(u8, u8)>,
     selected: (u8, u8),
-    breakpoint_cell: Option<(u8, u8)>,
-    breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
     grid_focused: bool,
     pending_keys: Vec<egui::Key>,
 }
@@ -26,8 +26,6 @@ impl ZeroPageWindow {
             open: true,
             hover: None,
             selected: (0, 0),
-            breakpoint_cell: None,
-            breakpoint_value: None,
             grid_focused: false,
             pending_keys: Vec::new(),
         }
@@ -42,7 +40,12 @@ impl ZeroPageWindow {
     }
 
     /// Render the zero page widget using egui immediate mode.
-    pub fn widget(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+    pub fn widget(
+        &mut self,
+        ui: &mut egui::Ui,
+        zero_page: Option<&[u8; 256]>,
+        breakpoints: &mut BreakpointMap,
+    ) {
         let mut open = self.open;
 
         egui::Window::new("Zero Page")
@@ -52,8 +55,8 @@ impl ZeroPageWindow {
             .show(ui.ctx(), |ui| {
                 let mut grid_has_focus = false;
                 ui.horizontal(|ui| {
-                    grid_has_focus = self.memory_grid(ui, zero_page);
-                    self.sidebar(ui, zero_page);
+                    grid_has_focus = self.memory_grid(ui, zero_page, breakpoints);
+                    self.sidebar(ui, zero_page, breakpoints);
                 });
                 self.grid_focused = grid_has_focus;
                 self.handle_keyboard(ui, grid_has_focus);
@@ -63,7 +66,12 @@ impl ZeroPageWindow {
     }
 
     /// Draw the memory grid, a 16x16 visualization of the zero page memory.
-    fn memory_grid(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) -> bool {
+    fn memory_grid(
+        &mut self,
+        ui: &mut egui::Ui,
+        zero_page: Option<&[u8; 256]>,
+        breakpoints: &BreakpointMap,
+    ) -> bool {
         const ZERO_PAGE_SIDE: usize = 16;
         const CELL: f32 = 30.0;
         const HEADER: f32 = 30.0;
@@ -203,24 +211,17 @@ impl ZeroPageWindow {
                             }
 
                             // Draw the breakpoint outline.
-                            let breakpoint = self.breakpoint_cell.or_else(|| {
-                                self.breakpoint_value.map(|(r, c, _)| (r, c))
-                            });
-                            if let Some((breakpoint_row, breakpoint_column)) = breakpoint
-                            {
-                                if breakpoint_row == row as u8
-                                    && breakpoint_column == col as u8
-                                {
-                                    painter.rect_stroke(
-                                        cell_rect.shrink(2.0),
-                                        CELL_RADIUS,
-                                        egui::Stroke {
-                                            width: 1.5,
-                                            color: egui::Color32::from_rgb(255, 165, 0),
-                                        },
-                                        egui::StrokeKind::Inside,
-                                    );
-                                }
+                            let address: u16 = (row as u16) * 0x10 + col as u16;
+                            if breakpoints.contains_key(&address) {
+                                painter.rect_stroke(
+                                    cell_rect.shrink(2.0),
+                                    CELL_RADIUS,
+                                    egui::Stroke {
+                                        width: 1.5,
+                                        color: egui::Color32::from_rgb(255, 165, 0),
+                                    },
+                                    egui::StrokeKind::Inside,
+                                );
                             }
 
                             // Draw the text, e.g. "2F", "00", "1E"
@@ -313,7 +314,12 @@ impl ZeroPageWindow {
     }
 
     /// Create the sidebar UI.
-    fn sidebar(&mut self, ui: &mut egui::Ui, zero_page: Option<&[u8; 256]>) {
+    fn sidebar(
+        &mut self,
+        ui: &mut egui::Ui,
+        zero_page: Option<&[u8; 256]>,
+        breakpoints: &mut BreakpointMap,
+    ) {
         let zero_page = zero_page.expect("The zero page exists");
 
         ui.vertical(|ui| {
@@ -329,6 +335,7 @@ impl ZeroPageWindow {
                         .get(idx)
                         .expect("Out of bounds access on the zero_page.")
                 };
+                let address_u16 = address as u16;
 
                 ui.monospace(format!("Address ${address:02X}"));
                 ui.monospace(format!("Hex     ${}", format!("0x{value:02X}")));
@@ -338,24 +345,23 @@ impl ZeroPageWindow {
                 ui.separator();
 
                 // Compute the breakpoint display state.
-                let mut is_breakpoint_cell = self.breakpoint_cell == Some(self.selected);
-                let mut is_breakpoint_value = self
-                    .breakpoint_value
-                    .map(|(r, c, _)| Some((r, c)) == Some(self.selected))
-                    .unwrap_or(false);
-                let mut target_value: u8 = self
-                    .breakpoint_value
-                    .and_then(|(_, _, v)| Some(v))
-                    .unwrap_or(0);
+                let mut is_breakpoint_cell =
+                    matches!(breakpoints.get(&address_u16), Some(Breakpoint::AnyChange));
+                let mut target_value: u8 = match breakpoints.get(&address_u16) {
+                    Some(Breakpoint::Value(v)) => *v,
+                    _ => 0,
+                };
+                let mut is_breakpoint_value =
+                    matches!(breakpoints.get(&address_u16), Some(Breakpoint::Value(_)));
 
                 // Draw the breakpoints.
                 ui.horizontal(|ui| {
                     if ui.checkbox(&mut is_breakpoint_cell, "Breakpoint").clicked() {
                         if is_breakpoint_cell {
-                            self.breakpoint_cell = Some(self.selected);
-                            self.breakpoint_value = None;
+                            breakpoints.insert(address_u16, Breakpoint::AnyChange);
+                            is_breakpoint_value = false;
                         } else {
-                            self.breakpoint_cell = None;
+                            breakpoints.remove(&address_u16);
                         }
                     }
 
@@ -364,11 +370,11 @@ impl ZeroPageWindow {
                         .clicked()
                     {
                         if is_breakpoint_value {
-                            let (row, col) = self.selected;
-                            self.breakpoint_value = Some((row, col, target_value));
-                            self.breakpoint_cell = None;
+                            breakpoints
+                                .insert(address_u16, Breakpoint::Value(target_value));
+                            is_breakpoint_cell = false;
                         } else {
-                            self.breakpoint_value = None;
+                            breakpoints.remove(&address_u16);
                         }
                     }
                 });
@@ -380,8 +386,8 @@ impl ZeroPageWindow {
                         if ui.text_edit_singleline(&mut value_str).changed() {
                             if let Ok(val) = u8::from_str_radix(value_str.trim(), 16) {
                                 target_value = val;
-                                let (row, col) = self.selected;
-                                self.breakpoint_value = Some((row, col, target_value));
+                                breakpoints
+                                    .insert(address_u16, Breakpoint::Value(target_value));
                             }
                         }
                     });
