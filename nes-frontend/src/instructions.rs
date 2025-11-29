@@ -25,6 +25,7 @@ pub struct InstructionsWindow {
     pending_action: Option<InstructionsAction>,
     scroll_to_bottom: bool,
     last_pc: Option<u16>,
+    last_current_text: Option<String>,
 }
 
 impl InstructionsWindow {
@@ -35,6 +36,7 @@ impl InstructionsWindow {
             pending_action: None,
             scroll_to_bottom: false,
             last_pc: None,
+            last_current_text: None,
         }
     }
 
@@ -127,6 +129,7 @@ impl InstructionsWindow {
                         address_to_label,
                         &mut self.executed_instructions,
                         &mut self.last_pc,
+                        &mut self.last_current_text,
                     );
 
                     for entry in entries {
@@ -161,6 +164,7 @@ fn decode_instructions(
     address_to_label: Option<&AddressToLabel>,
     executed_instructions: &mut VecDeque<String>,
     last_pc: &mut Option<u16>,
+    last_current_text: &mut Option<String>,
 ) -> Vec<InstructionEntry> {
     let mut entries: Vec<InstructionEntry> = vec![];
     let bus = cpu.bus.borrow();
@@ -260,11 +264,16 @@ fn decode_instructions(
     }
 
     if let (Some(text), Some(pc)) = (current_text, current_pc) {
-        if Some(pc) != *last_pc {
-            executed_instructions.push_front(text);
-            executed_instructions.truncate(HISTORY_LIMIT);
-            *last_pc = Some(pc);
+        if let (Some(previous_pc), Some(previous_text)) =
+            (last_pc.take(), last_current_text.take())
+        {
+            if previous_pc != pc {
+                executed_instructions.push_front(previous_text);
+                executed_instructions.truncate(HISTORY_LIMIT);
+            }
         }
+        *last_pc = Some(pc);
+        *last_current_text = Some(text);
     }
 
     entries
