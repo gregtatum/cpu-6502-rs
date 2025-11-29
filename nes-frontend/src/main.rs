@@ -292,24 +292,21 @@ impl Widgets {
         // they do not participate in egui focus navigation.
         if let sdl2::event::Event::KeyDown {
             keycode: Some(keycode),
-            repeat,
             ..
         } = event
         {
-            if !repeat {
-                let mapped = match keycode {
-                    Keycode::Up => Some(egui::Key::ArrowUp),
-                    Keycode::Down => Some(egui::Key::ArrowDown),
-                    Keycode::Left => Some(egui::Key::ArrowLeft),
-                    Keycode::Right => Some(egui::Key::ArrowRight),
-                    _ => None,
-                };
-                if let Some(key) = mapped {
-                    if self.zero_page.grid_focused() {
-                        self.zero_page.enqueue_key(key);
-                    }
-                    return;
+            let mapped = match keycode {
+                Keycode::Up => Some(egui::Key::ArrowUp),
+                Keycode::Down => Some(egui::Key::ArrowDown),
+                Keycode::Left => Some(egui::Key::ArrowLeft),
+                Keycode::Right => Some(egui::Key::ArrowRight),
+                _ => None,
+            };
+            if let Some(key) = mapped {
+                if self.zero_page.grid_focused() {
+                    self.zero_page.enqueue_key(key);
                 }
+                return;
             }
         }
 
