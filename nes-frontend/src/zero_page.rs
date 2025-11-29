@@ -88,18 +88,6 @@ impl ZeroPageWindow {
 
                 // Fill the background.
                 painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
-                if grid_has_focus {
-                    let focus_stroke = egui::Stroke {
-                        width: 2.5,
-                        color: ui.visuals().selection.bg_fill,
-                    };
-                    painter.rect_stroke(
-                        rect.shrink(2.0),
-                        4.0,
-                        focus_stroke,
-                        egui::StrokeKind::Inside,
-                    );
-                }
 
                 let grid_stroke = ui.visuals().widgets.noninteractive.bg_stroke;
 
@@ -273,6 +261,20 @@ impl ZeroPageWindow {
                             self.selected = cell;
                         }
                     }
+                }
+
+                // Draw focus outline last so it sits above the grid and avoids clipping.
+                if grid_has_focus {
+                    let focus_stroke = egui::Stroke {
+                        width: 1.0,
+                        color: ui.visuals().widgets.active.fg_stroke.color,
+                    };
+                    painter.rect_stroke(
+                        rect.shrink(0.5),
+                        4.0,
+                        focus_stroke,
+                        egui::StrokeKind::Inside,
+                    );
                 }
             });
         });
