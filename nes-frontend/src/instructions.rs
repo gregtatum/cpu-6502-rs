@@ -24,6 +24,7 @@ pub struct InstructionsWindow {
     executed_instructions: VecDeque<String>,
     pending_action: Option<InstructionsAction>,
     scroll_to_bottom: bool,
+    last_pc: Option<u16>,
 }
 
 impl InstructionsWindow {
@@ -33,6 +34,7 @@ impl InstructionsWindow {
             executed_instructions: VecDeque::new(),
             pending_action: None,
             scroll_to_bottom: false,
+            last_pc: None,
         }
     }
 
@@ -124,6 +126,7 @@ impl InstructionsWindow {
                         cpu,
                         address_to_label,
                         &mut self.executed_instructions,
+                        &mut self.last_pc,
                     );
 
                     for entry in entries {
@@ -157,6 +160,7 @@ fn decode_instructions(
     cpu: &Cpu6502,
     address_to_label: Option<&AddressToLabel>,
     executed_instructions: &mut VecDeque<String>,
+    last_pc: &mut Option<u16>,
 ) -> Vec<InstructionEntry> {
     let mut entries: Vec<InstructionEntry> = vec![];
     let bus = cpu.bus.borrow();
@@ -242,7 +246,10 @@ fn decode_instructions(
 
         let text = format!("${instruction_pc:04X} {opcode_display}{operand}");
         if i == 0 {
-            executed_instructions.push_front(text.clone());
+            if Some(instruction_pc) != *last_pc {
+                executed_instructions.push_front(text.clone());
+                *last_pc = Some(instruction_pc);
+            }
         }
 
         entries.push(InstructionEntry {
