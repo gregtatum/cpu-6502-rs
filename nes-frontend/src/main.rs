@@ -1,12 +1,14 @@
 pub mod drivers;
+pub mod instructions;
 pub mod zero_page;
 
 use crate::drivers::controller_sdl2::ControllerManager;
+use crate::instructions::InstructionsWindow;
 use crate::zero_page::ZeroPageWindow;
 use egui::FullOutput;
 use glow::HasContext;
 use nes_core::{
-    asm::{AsmLexer, BytesLabels},
+    asm::{AddressToLabel, AsmLexer, BytesLabels},
     cpu_6502::ExitReason,
     mappers::SimpleProgram,
     nes_core::NesCore,
@@ -23,6 +25,7 @@ use std::{env, sync::Arc};
 /// The front-end for the NES core, powered by SLD2.
 struct NesFrontend {
     nes_core: NesCore,
+    address_to_label: AddressToLabel,
     event_pump: sdl2::EventPump,
     controller_manager: ControllerManager,
     widgets: Widgets,
@@ -40,9 +43,11 @@ impl NesFrontend {
         let video = sdl.video()?;
         let window = NesFrontend::setup_window(&video)?;
         let (gl, gl_context) = NesFrontend::setup_gl(&video, &window)?;
+        let (nes_core, address_to_label) = create_demo_core();
 
         Ok(Self {
-            nes_core: create_demo_core(),
+            nes_core,
+            address_to_label,
             window,
             event_pump: sdl.event_pump()?,
             controller_manager: ControllerManager::new(&sdl)?,
@@ -135,9 +140,13 @@ impl NesFrontend {
                 None
             };
 
-            let full_output =
-                self.widgets
-                    .update(&self.window, &self.frame_timer, zero_page_snapshot);
+            let full_output = self.widgets.update(
+                &self.window,
+                &self.frame_timer,
+                zero_page_snapshot,
+                &self.nes_core.cpu,
+                Some(&self.address_to_label),
+            );
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
             let elapsed = self.frame_timer.frame_secs();
@@ -199,7 +208,7 @@ fn is_command_modifier(keymod: Mod) -> bool {
     keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD | Mod::LGUIMOD | Mod::RGUIMOD)
 }
 
-fn create_demo_core() -> NesCore {
+fn create_demo_core() -> (NesCore, AddressToLabel) {
     let mut lexer = AsmLexer::new(
         "
             ; Fill the zero page with incrementing values.
@@ -214,9 +223,15 @@ fn create_demo_core() -> NesCore {
     );
     match lexer.parse() {
         Ok(()) => {
-            let BytesLabels { mut bytes, .. } = lexer.into_bytes().unwrap();
+            let BytesLabels {
+                mut bytes,
+                address_to_label,
+            } = lexer.into_bytes().unwrap();
             bytes.push(OpCode::KIL as u8);
-            NesCore::new(Box::new(SimpleProgram::load(&bytes)))
+            (
+                NesCore::new(Box::new(SimpleProgram::load(&bytes))),
+                address_to_label,
+            )
         }
         Err(error) => {
             error.panic_nicely();
@@ -252,6 +267,7 @@ struct Widgets {
     /// Integrate the SDL2 environment to the egui RawInput on every tick.
     input: egui::RawInput,
     zero_page: ZeroPageWindow,
+    instructions: InstructionsWindow,
 }
 
 impl Widgets {
@@ -282,6 +298,7 @@ impl Widgets {
             .map_err(|err| err.to_string())?,
             input: Default::default(),
             zero_page: ZeroPageWindow::new(),
+            instructions: InstructionsWindow::new(),
         })
     }
 
@@ -423,6 +440,8 @@ impl Widgets {
         window: &Window,
         frame_timer: &FrameTimer,
         zero_page_snapshot: Option<[u8; 256]>,
+        cpu: &nes_core::cpu_6502::Cpu6502,
+        address_to_label: Option<&AddressToLabel>,
     ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
         let (logical_width, logical_height) = window.size();
@@ -446,11 +465,13 @@ impl Widgets {
         let input = std::mem::take(&mut self.input);
 
         let zero_page_new = &mut self.zero_page;
+        let instructions = &mut self.instructions;
         let zero_page_snapshot = zero_page_snapshot.map(Box::new);
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 zero_page_new.widget(ui, zero_page_snapshot.as_deref());
             });
+            instructions.widget(ctx, cpu, address_to_label);
         })
     }
 
