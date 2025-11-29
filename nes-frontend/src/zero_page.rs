@@ -12,6 +12,8 @@ pub struct ZeroPageWindow {
     selected: (u8, u8),
     breakpoint_cell: Option<(u8, u8)>,
     breakpoint_value: Option<(u8, u8, u8)>, // row, col, value
+    grid_focused: bool,
+    pending_keys: Vec<egui::Key>,
 }
 
 impl ZeroPageWindow {
@@ -26,7 +28,17 @@ impl ZeroPageWindow {
             selected: (0, 0),
             breakpoint_cell: None,
             breakpoint_value: None,
+            grid_focused: false,
+            pending_keys: Vec::new(),
         }
+    }
+
+    pub fn grid_focused(&self) -> bool {
+        self.grid_focused
+    }
+
+    pub fn enqueue_key(&mut self, key: egui::Key) {
+        self.pending_keys.push(key);
     }
 
     /// Render the zero page widget using egui immediate mode.
@@ -43,6 +55,7 @@ impl ZeroPageWindow {
                     grid_has_focus = self.memory_grid(ui, zero_page);
                     self.sidebar(ui, zero_page);
                 });
+                self.grid_focused = grid_has_focus;
                 self.handle_keyboard(ui, grid_has_focus);
             });
 
@@ -257,26 +270,19 @@ impl ZeroPageWindow {
     // Handle egui keyboard events when this window is open.
     fn handle_keyboard(&mut self, ui: &mut egui::Ui, grid_has_focus: bool) {
         if !grid_has_focus {
+            self.pending_keys.clear();
             return;
         }
-        let events = ui.input(|input| input.events.clone());
-        for event in events {
-            if let egui::Event::Key {
-                key,
-                pressed: true,
-                modifiers,
-                ..
-            } = event
-            {
-                ui.ctx()
-                    .input_mut(|input| input.consume_key(modifiers, key));
-                match key {
-                    egui::Key::ArrowUp => self.change_selection(0, -1),
-                    egui::Key::ArrowDown => self.change_selection(0, 1),
-                    egui::Key::ArrowLeft => self.change_selection(-1, 0),
-                    egui::Key::ArrowRight => self.change_selection(1, 0),
-                    _ => {}
-                }
+        let pending = std::mem::take(&mut self.pending_keys);
+        for key in pending {
+            ui.ctx()
+                .input_mut(|input| input.consume_key(egui::Modifiers::default(), key));
+            match key {
+                egui::Key::ArrowUp => self.change_selection(0, -1),
+                egui::Key::ArrowDown => self.change_selection(0, 1),
+                egui::Key::ArrowLeft => self.change_selection(-1, 0),
+                egui::Key::ArrowRight => self.change_selection(1, 0),
+                _ => {}
             }
         }
     }
