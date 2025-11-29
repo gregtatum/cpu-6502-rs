@@ -39,10 +39,31 @@ impl NesCore {
 
     pub fn step(&mut self) {
         self.cpu.tick();
+        // Keep the emulator paused after a manual step.
+        self.is_breakpoint = true;
+    }
+
+    /// Advance exactly one instruction and remain paused afterward.
+    pub fn step_instruction(&mut self) -> ExitReason {
+        let has_more = self.cpu.tick();
+        self.is_breakpoint = true;
+        if has_more {
+            ExitReason::MaxTicks
+        } else {
+            ExitReason::KIL
+        }
+    }
+
+    /// Resume running without stopping on a breakpoint.
+    pub fn resume(&mut self) {
+        self.is_breakpoint = false;
     }
 
     /// Runs the CPU for at most one frame worth of work.
     pub fn frame(&mut self) -> ExitReason {
+        if self.is_breakpoint {
+            return ExitReason::MaxTicks;
+        }
         let frame_limit = self.cpu.tick_count + CPU_TICKS_PER_FRAME;
         self.cpu.max_ticks = Some(frame_limit);
         let exit_reason = self.cpu.run();
