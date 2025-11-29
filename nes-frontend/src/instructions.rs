@@ -105,6 +105,12 @@ impl InstructionsWindow {
             .open(&mut open)
             .collapsible(false)
             .show(ctx, |ui| {
+                if !is_stepping {
+                    self.executed_instructions.clear();
+                    self.last_pc = None;
+                    self.last_current_text = None;
+                }
+
                 ui.horizontal(|ui| {
                     let status = if is_stepping { "Stepping" } else { "Running" };
                     ui.label(RichText::new(status).monospace());
