@@ -44,6 +44,14 @@ impl NesCore {
 
     /// Advance exactly one instruction and remain paused afterward.
     pub fn step_instruction(&mut self) -> ExitReason {
+        // If the next opcode is BRK, advance past it so stepping continues.
+        if self.cpu.bus.borrow().read_u8(self.cpu.pc) == crate::opcodes::OpCode::BRK as u8
+        {
+            self.cpu.pc = self.cpu.pc.wrapping_add(1);
+            self.cpu.tick_count = self.cpu.tick_count.wrapping_add(1);
+            return ExitReason::BRK;
+        }
+
         let has_more = self.cpu.tick();
         if has_more {
             ExitReason::MaxTicks

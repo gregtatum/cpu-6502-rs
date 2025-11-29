@@ -158,7 +158,8 @@ impl NesFrontend {
                     }
                     InstructionsAction::StepMany(count) => {
                         for _ in 0..count {
-                            if let ExitReason::KIL = self.nes_core.step_instruction() {
+                            if matches!(self.nes_core.step_instruction(), ExitReason::KIL)
+                            {
                                 break;
                             }
                         }
