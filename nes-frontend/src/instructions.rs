@@ -109,6 +109,7 @@ impl InstructionsWindow {
                     self.executed_instructions.clear();
                     self.last_pc = None;
                     self.last_current_text = None;
+                    self.scroll_to_bottom = false;
                 }
 
                 ui.horizontal(|ui| {
@@ -129,30 +130,32 @@ impl InstructionsWindow {
                     }
                 });
 
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let entries = decode_instructions(
-                        cpu,
-                        address_to_label,
-                        &mut self.executed_instructions,
-                        &mut self.last_pc,
-                        &mut self.last_current_text,
-                    );
+                if is_stepping {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        let entries = decode_instructions(
+                            cpu,
+                            address_to_label,
+                            &mut self.executed_instructions,
+                            &mut self.last_pc,
+                            &mut self.last_current_text,
+                        );
 
-                    for entry in entries {
-                        let mut text = RichText::new(entry.text).monospace();
-                        if entry.is_current {
-                            text = text.strong();
+                        for entry in entries {
+                            let mut text = RichText::new(entry.text).monospace();
+                            if entry.is_current {
+                                text = text.strong();
+                            }
+                            if entry.is_history {
+                                text = text.color(ui.visuals().weak_text_color());
+                            }
+                            ui.label(text);
+                            if self.scroll_to_bottom && entry.is_current {
+                                ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                            }
                         }
-                        if entry.is_history {
-                            text = text.color(ui.visuals().weak_text_color());
-                        }
-                        ui.label(text);
-                        if self.scroll_to_bottom && entry.is_current {
-                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                        }
-                    }
-                    self.scroll_to_bottom = false;
-                });
+                        self.scroll_to_bottom = false;
+                    });
+                }
             });
 
         self.open = open;
