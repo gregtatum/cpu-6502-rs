@@ -67,7 +67,7 @@ impl InstructionsWindow {
             | Keycode::Num7
             | Keycode::Num8
             | Keycode::Num9 => {
-                let digit = match keycode {
+                let digit: u32 = match keycode {
                     Keycode::Num1 => 1,
                     Keycode::Num2 => 2,
                     Keycode::Num3 => 3,
@@ -79,7 +79,7 @@ impl InstructionsWindow {
                     Keycode::Num9 => 9,
                     _ => unreachable!(),
                 };
-                let count = (digit + 1).pow(2) as u32;
+                let count = (digit + 1).pow(2);
                 self.pending_action = Some(InstructionsAction::StepMany(count));
                 true
             }
