@@ -20,6 +20,7 @@ use sdl2::keyboard::{Keycode, Mod};
 use sdl2::video::GLProfile;
 use sdl2::video::Window;
 use sdl2::{event::Event, VideoSubsystem};
+use std::collections::VecDeque;
 use std::thread;
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
@@ -164,6 +165,7 @@ impl NesFrontend {
                 &self.nes_core.cpu,
                 Some(&self.address_to_label),
                 self.nes_core.is_stepping,
+                &self.nes_core.instruction_history.borrow(),
                 &mut self.breakpoints,
             );
             self.widgets.draw(&self.gl, &full_output, &self.window);
@@ -516,6 +518,7 @@ impl Widgets {
         cpu: &nes_core::cpu_6502::Cpu6502,
         address_to_label: Option<&AddressToLabel>,
         is_stepping: bool,
+        instruction_history: &VecDeque<u16>,
         breakpoints: &mut BreakpointMap,
     ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
@@ -547,7 +550,13 @@ impl Widgets {
             egui::CentralPanel::default().show(ctx, |ui| {
                 zero_page_new.widget(ui, zero_page_snapshot.as_deref(), breakpoints);
             });
-            instructions.widget(ctx, cpu, address_to_label, is_stepping);
+            instructions.widget(
+                ctx,
+                cpu,
+                address_to_label,
+                is_stepping,
+                instruction_history,
+            );
         })
     }
 

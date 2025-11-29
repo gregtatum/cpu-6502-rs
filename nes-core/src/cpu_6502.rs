@@ -1,6 +1,9 @@
 use crate::constants::{memory_range, InterruptVectors};
 use crate::opcodes::{Mode, OpCode};
 use crate::{bus::SharedBus, opcodes};
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
 pub mod opcodes_illegal;
 pub mod opcodes_jump;
 pub mod opcodes_logical;
@@ -45,6 +48,8 @@ pub enum ExitReason {
 pub struct Cpu6502 {
     // The bus is what holds all the memory access for the program.
     pub bus: SharedBus,
+    /// Recently executed instruction addresses.
+    pub instruction_history: Option<Rc<RefCell<VecDeque<u16>>>>,
     // "A" register - The accumulator. Typical results of operations are stored here.
     // In combination with the status register, supports using the status register for
     // carrying, overflow detection, and so on.
@@ -113,6 +118,7 @@ impl Cpu6502 {
 
         Cpu6502 {
             bus,
+            instruction_history: None,
             // Accumulator
             a: 0,
             // X & Y Registers.
@@ -128,6 +134,10 @@ impl Cpu6502 {
             tick_count: 0,
             max_ticks: None,
         }
+    }
+
+    pub fn attach_instruction_history(&mut self, history: Rc<RefCell<VecDeque<u16>>>) {
+        self.instruction_history = Some(history);
     }
 
     /// Read the PC without incrementing.
@@ -345,6 +355,14 @@ impl Cpu6502 {
     /// Does one operational tick of the CPU. Returns true if there are more
     /// instructions, and false if a KIL operation was encountered.
     pub fn tick(&mut self) -> bool {
+        if let Some(history) = &self.instruction_history {
+            let mut history = history.borrow_mut();
+            history.push_back(self.pc);
+            const INSTRUCTION_HISTORY_LIMIT: usize = 256;
+            if history.len() > INSTRUCTION_HISTORY_LIMIT {
+                history.pop_front();
+            }
+        }
         self.tick_count += 1;
         self.cycles = 0;
         let opcode = self.next_u8();

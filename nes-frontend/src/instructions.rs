@@ -9,7 +9,6 @@ use nes_core::{
     opcodes::{Mode, ADDRESSING_MODE_TABLE, OPCODE_STRING_TABLE},
 };
 
-const HISTORY_LIMIT: usize = 24;
 const UPCOMING_LIMIT: usize = 16;
 
 pub enum InstructionsAction {
@@ -21,22 +20,16 @@ pub enum InstructionsAction {
 
 pub struct InstructionsWindow {
     open: bool,
-    executed_instructions: VecDeque<String>,
     pending_action: Option<InstructionsAction>,
     scroll_to_current: bool,
-    last_pc: Option<u16>,
-    last_current_text: Option<String>,
 }
 
 impl InstructionsWindow {
     pub fn new() -> Self {
         Self {
             open: true,
-            executed_instructions: VecDeque::new(),
             pending_action: None,
             scroll_to_current: false,
-            last_pc: None,
-            last_current_text: None,
         }
     }
 
@@ -99,19 +92,13 @@ impl InstructionsWindow {
         cpu: &Cpu6502,
         address_to_label: Option<&AddressToLabel>,
         is_stepping: bool,
+        history: &VecDeque<u16>,
     ) {
         let mut open = self.open;
         egui::Window::new("Instructions")
             .open(&mut open)
             .collapsible(false)
             .show(ctx, |ui| {
-                if !is_stepping {
-                    self.executed_instructions.clear();
-                    self.last_pc = None;
-                    self.last_current_text = None;
-                    self.scroll_to_current = false;
-                }
-
                 ui.horizontal(|ui| {
                     let status = if is_stepping { "Stepping" } else { "Running" };
                     ui.label(RichText::new(status).monospace());
@@ -132,13 +119,7 @@ impl InstructionsWindow {
 
                 if is_stepping {
                     egui::ScrollArea::vertical().show(ui, |ui| {
-                        let entries = decode_instructions(
-                            cpu,
-                            address_to_label,
-                            &mut self.executed_instructions,
-                            &mut self.last_pc,
-                            &mut self.last_current_text,
-                        );
+                        let entries = decode_instructions(cpu, address_to_label, history);
 
                         for entry in entries {
                             let mut text = RichText::new(entry.text).monospace();
@@ -171,99 +152,24 @@ struct InstructionEntry {
 fn decode_instructions(
     cpu: &Cpu6502,
     address_to_label: Option<&AddressToLabel>,
-    executed_instructions: &mut VecDeque<String>,
-    last_pc: &mut Option<u16>,
-    last_current_text: &mut Option<String>,
+    history: &VecDeque<u16>,
 ) -> Vec<InstructionEntry> {
     let mut entries: Vec<InstructionEntry> = vec![];
     let bus = cpu.bus.borrow();
     let mut program_counter = cpu.pc;
 
-    executed_instructions.truncate(HISTORY_LIMIT);
-    for history in executed_instructions.iter().rev() {
+    for pc in history.iter().rev() {
+        let (text, _) = format_instruction(&bus, *pc, address_to_label);
         entries.push(InstructionEntry {
-            text: history.clone(),
+            text,
             is_current: false,
             is_history: true,
         });
     }
 
-    let mut current_text: Option<String> = None;
-    let mut current_pc: Option<u16> = None;
     for i in 0..UPCOMING_LIMIT {
-        let instruction_pc = program_counter;
-        let opcode = bus.read_u8(program_counter);
-        program_counter = program_counter.wrapping_add(1);
-
-        let opcode_display = OPCODE_STRING_TABLE[opcode as usize];
-        let mode = ADDRESSING_MODE_TABLE[opcode as usize];
-        let mut operand = String::new();
-
-        let mut read_u8 = || {
-            let value = bus.read_u8(program_counter);
-            program_counter = program_counter.wrapping_add(1);
-            value
-        };
-
-        match mode {
-            Mode::Absolute
-            | Mode::AbsoluteIndexedX
-            | Mode::AbsoluteIndexedY
-            | Mode::Indirect => {
-                let low = bus.read_u8(program_counter);
-                let high = bus.read_u8(program_counter.wrapping_add(1));
-                program_counter = program_counter.wrapping_add(2);
-                let address = u16::from_le_bytes([low, high]);
-
-                if let Some(labels) = address_to_label {
-                    if let Some(label) = labels.get(&address) {
-                        operand.push_str(&format!(" {}", label));
-                    }
-                }
-
-                match mode {
-                    Mode::Indirect => {
-                        operand.push_str(&format!(" (${address:04X})"));
-                    }
-                    Mode::AbsoluteIndexedX => {
-                        operand.push_str(&format!(" ${address:04X},X"));
-                    }
-                    Mode::AbsoluteIndexedY => {
-                        operand.push_str(&format!(" ${address:04X},Y"));
-                    }
-                    Mode::Absolute => {
-                        operand.push_str(&format!(" ${address:04X}"));
-                    }
-                    _ => {}
-                }
-            }
-            Mode::Immediate => operand.push_str(&format!(" #${:02X}", read_u8())),
-            Mode::ZeroPage => operand.push_str(&format!(" ${:02X}", read_u8())),
-            Mode::ZeroPageX => operand.push_str(&format!(" ${:02X},X", read_u8())),
-            Mode::ZeroPageY => operand.push_str(&format!(" ${:02X},Y", read_u8())),
-            Mode::IndirectX => operand.push_str(&format!(" (${0:02X},X)", read_u8())),
-            Mode::IndirectY => operand.push_str(&format!(" (${0:02X}),Y", read_u8())),
-            Mode::Relative => {
-                let relative = read_u8() as i8;
-                let target = (instruction_pc as i32 + relative as i32) as u16;
-                if let Some(labels) = address_to_label {
-                    if let Some(label) = labels.get(&target) {
-                        operand.push_str(&format!(" {}", label));
-                    } else {
-                        operand.push_str(&format!(" {relative:+}"));
-                    }
-                } else {
-                    operand.push_str(&format!(" {relative:+}"));
-                }
-            }
-            Mode::Implied | Mode::None | Mode::RegisterA => {}
-        }
-
-        let text = format!("${instruction_pc:04X} {opcode_display}{operand}");
-        if i == 0 {
-            current_text = Some(text.clone());
-            current_pc = Some(instruction_pc);
-        }
+        let (text, len) = format_instruction(&bus, program_counter, address_to_label);
+        program_counter = program_counter.wrapping_add(len);
 
         entries.push(InstructionEntry {
             text,
@@ -272,18 +178,85 @@ fn decode_instructions(
         });
     }
 
-    if let (Some(text), Some(pc)) = (current_text, current_pc) {
-        if let (Some(previous_pc), Some(previous_text)) =
-            (last_pc.take(), last_current_text.take())
-        {
-            if previous_pc != pc {
-                executed_instructions.push_front(previous_text);
-                executed_instructions.truncate(HISTORY_LIMIT);
+    entries
+}
+
+fn format_instruction(
+    bus: &nes_core::bus::Bus,
+    pc: u16,
+    address_to_label: Option<&AddressToLabel>,
+) -> (String, u16) {
+    let mut cursor = pc;
+    let opcode = bus.read_u8(cursor);
+    cursor = cursor.wrapping_add(1);
+
+    let opcode_display = OPCODE_STRING_TABLE[opcode as usize];
+    let mode = ADDRESSING_MODE_TABLE[opcode as usize];
+    let mut operand = String::new();
+
+    let read_u8 = |cursor: &mut u16| {
+        let value = bus.read_u8(*cursor);
+        *cursor = cursor.wrapping_add(1);
+        value
+    };
+
+    match mode {
+        Mode::Absolute
+        | Mode::AbsoluteIndexedX
+        | Mode::AbsoluteIndexedY
+        | Mode::Indirect => {
+            let low = read_u8(&mut cursor);
+            let high = read_u8(&mut cursor);
+            let address = u16::from_le_bytes([low, high]);
+
+            if let Some(labels) = address_to_label {
+                if let Some(label) = labels.get(&address) {
+                    operand.push_str(&format!(" {}", label));
+                }
+            }
+
+            match mode {
+                Mode::Indirect => {
+                    operand.push_str(&format!(" (${address:04X})"));
+                }
+                Mode::AbsoluteIndexedX => {
+                    operand.push_str(&format!(" ${address:04X},X"));
+                }
+                Mode::AbsoluteIndexedY => {
+                    operand.push_str(&format!(" ${address:04X},Y"));
+                }
+                Mode::Absolute => {
+                    operand.push_str(&format!(" ${address:04X}"));
+                }
+                _ => {}
             }
         }
-        *last_pc = Some(pc);
-        *last_current_text = Some(text);
+        Mode::Immediate => operand.push_str(&format!(" #${:02X}", read_u8(&mut cursor))),
+        Mode::ZeroPage => operand.push_str(&format!(" ${:02X}", read_u8(&mut cursor))),
+        Mode::ZeroPageX => operand.push_str(&format!(" ${:02X},X", read_u8(&mut cursor))),
+        Mode::ZeroPageY => operand.push_str(&format!(" ${:02X},Y", read_u8(&mut cursor))),
+        Mode::IndirectX => {
+            operand.push_str(&format!(" (${0:02X},X)", read_u8(&mut cursor)))
+        }
+        Mode::IndirectY => {
+            operand.push_str(&format!(" (${0:02X}),Y", read_u8(&mut cursor)))
+        }
+        Mode::Relative => {
+            let relative = read_u8(&mut cursor) as i8;
+            let target = (pc as i32 + relative as i32) as u16;
+            if let Some(labels) = address_to_label {
+                if let Some(label) = labels.get(&target) {
+                    operand.push_str(&format!(" {}", label));
+                } else {
+                    operand.push_str(&format!(" {relative:+}"));
+                }
+            } else {
+                operand.push_str(&format!(" {relative:+}"));
+            }
+        }
+        Mode::Implied | Mode::None | Mode::RegisterA => {}
     }
 
-    entries
+    let len = cursor.wrapping_sub(pc);
+    (format!("${pc:04X} {opcode_display}{operand}"), len)
 }
