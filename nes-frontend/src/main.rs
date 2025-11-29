@@ -121,9 +121,10 @@ impl NesFrontend {
             }
 
             match self.nes_core.frame() {
-                // This will exit the entire program.
-                ExitReason::KIL => break,
-                ExitReason::BRK | ExitReason::MaxTicks | ExitReason::Breakpoint => {}
+                ExitReason::KIL
+                | ExitReason::BRK
+                | ExitReason::MaxTicks
+                | ExitReason::Breakpoint => {}
             }
 
             // What other integrations from SDL2 to egui do we want to support?
