@@ -23,7 +23,7 @@ pub struct InstructionsWindow {
     open: bool,
     executed_instructions: VecDeque<String>,
     pending_action: Option<InstructionsAction>,
-    scroll_to_bottom: bool,
+    scroll_to_current: bool,
     last_pc: Option<u16>,
     last_current_text: Option<String>,
 }
@@ -34,7 +34,7 @@ impl InstructionsWindow {
             open: true,
             executed_instructions: VecDeque::new(),
             pending_action: None,
-            scroll_to_bottom: false,
+            scroll_to_current: false,
             last_pc: None,
             last_current_text: None,
         }
@@ -109,7 +109,7 @@ impl InstructionsWindow {
                     self.executed_instructions.clear();
                     self.last_pc = None;
                     self.last_current_text = None;
-                    self.scroll_to_bottom = false;
+                    self.scroll_to_current = false;
                 }
 
                 ui.horizontal(|ui| {
@@ -123,7 +123,7 @@ impl InstructionsWindow {
                         if ui.button("Step").clicked() {
                             self.pending_action =
                                 Some(InstructionsAction::StepInstruction);
-                            self.scroll_to_bottom = true;
+                            self.scroll_to_current = true;
                         }
                     } else if ui.button("Pause").clicked() {
                         self.pending_action = Some(InstructionsAction::Pause);
@@ -149,11 +149,11 @@ impl InstructionsWindow {
                                 text = text.color(ui.visuals().weak_text_color());
                             }
                             ui.label(text);
-                            if self.scroll_to_bottom && entry.is_current {
-                                ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                            if self.scroll_to_current && entry.is_current {
+                                ui.scroll_to_cursor(Some(egui::Align::Center));
                             }
                         }
-                        self.scroll_to_bottom = false;
+                        self.scroll_to_current = false;
                     });
                 }
             });
