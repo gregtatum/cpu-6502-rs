@@ -175,6 +175,8 @@ fn decode_instructions(
         });
     }
 
+    let mut current_text: Option<String> = None;
+    let mut current_pc: Option<u16> = None;
     for i in 0..UPCOMING_LIMIT {
         let instruction_pc = program_counter;
         let opcode = bus.read_u8(program_counter);
@@ -246,10 +248,8 @@ fn decode_instructions(
 
         let text = format!("${instruction_pc:04X} {opcode_display}{operand}");
         if i == 0 {
-            if Some(instruction_pc) != *last_pc {
-                executed_instructions.push_front(text.clone());
-                *last_pc = Some(instruction_pc);
-            }
+            current_text = Some(text.clone());
+            current_pc = Some(instruction_pc);
         }
 
         entries.push(InstructionEntry {
@@ -257,6 +257,14 @@ fn decode_instructions(
             is_current: i == 0,
             is_history: false,
         });
+    }
+
+    if let (Some(text), Some(pc)) = (current_text, current_pc) {
+        if Some(pc) != *last_pc {
+            executed_instructions.push_front(text);
+            executed_instructions.truncate(HISTORY_LIMIT);
+            *last_pc = Some(pc);
+        }
     }
 
     entries
