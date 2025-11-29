@@ -165,7 +165,7 @@ impl NesFrontend {
                 &self.nes_core.cpu,
                 Some(&self.address_to_label),
                 self.nes_core.is_stepping,
-                &self.nes_core.instruction_history.borrow(),
+                &self.nes_core.cpu.instruction_history,
                 &mut self.breakpoints,
             );
             self.widgets.draw(&self.gl, &full_output, &self.window);

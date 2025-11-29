@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 use crate::cpu_6502::{Cpu6502, ExitReason};
@@ -22,21 +20,17 @@ pub struct NesCore {
     /// Indicates whether the CPU should halt at the current instruction while stepping.
     /// Defaults to true so consumers can begin in a paused/stepping state.
     pub is_stepping: bool,
-    pub instruction_history: Rc<RefCell<VecDeque<u16>>>,
 }
 
 impl NesCore {
     pub fn new(cartridge: Box<dyn Mapper>) -> NesCore {
         let bus = Bus::new_shared_bus(cartridge);
-        let history: Rc<RefCell<VecDeque<u16>>> = Rc::new(RefCell::new(VecDeque::new()));
-        let mut cpu = Cpu6502::new(Rc::clone(&bus));
-        cpu.attach_instruction_history(history.clone());
+        let cpu = Cpu6502::new(Rc::clone(&bus));
         NesCore {
             cpu,
             // Take ownership of the initial bus.
             bus,
             is_stepping: true,
-            instruction_history: history,
         }
     }
 
