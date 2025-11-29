@@ -29,6 +29,8 @@ pub enum StatusFlag {
 
 // The reason why a CPU run was ended.
 pub enum ExitReason {
+    /// A breakpoint was hit.
+    Breakpoint,
     KIL,
     BRK,
     /// This is usually from breaking the frame budget.

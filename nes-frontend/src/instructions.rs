@@ -44,14 +44,14 @@ impl InstructionsWindow {
 
     /// Handle keyboard shortcuts while the instructions window is visible.
     /// Only N/space/number keys are handled here.
-    pub fn handle_key(&mut self, keycode: Keycode, is_breakpoint: bool) -> bool {
+    pub fn handle_key(&mut self, keycode: Keycode, is_stepping: bool) -> bool {
         match keycode {
             Keycode::N => {
                 self.pending_action = Some(InstructionsAction::StepInstruction);
                 true
             }
             Keycode::Space => {
-                if is_breakpoint {
+                if is_stepping {
                     self.pending_action = Some(InstructionsAction::Resume);
                 } else {
                     self.pending_action = Some(InstructionsAction::Pause);
@@ -92,7 +92,7 @@ impl InstructionsWindow {
         ctx: &egui::Context,
         cpu: &Cpu6502,
         address_to_label: Option<&AddressToLabel>,
-        is_breakpoint: bool,
+        is_stepping: bool,
     ) {
         let mut open = self.open;
         egui::Window::new("Instructions")
@@ -100,10 +100,10 @@ impl InstructionsWindow {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    let status = if is_breakpoint { "Paused" } else { "Running" };
+                    let status = if is_stepping { "Stepping" } else { "Running" };
                     ui.label(RichText::new(status).monospace());
 
-                    if is_breakpoint {
+                    if is_stepping {
                         if ui.button("Resume").clicked() {
                             self.pending_action = Some(InstructionsAction::Resume);
                         }

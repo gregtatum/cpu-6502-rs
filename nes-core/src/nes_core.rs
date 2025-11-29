@@ -17,9 +17,9 @@ const CPU_TICKS_PER_FRAME: u64 = (NTSC_CPU_HZ / NTSC_FRAME_RATE) as u64;
 pub struct NesCore {
     pub bus: SharedBus,
     pub cpu: Cpu6502,
-    /// Indicates whether the CPU should halt at the current instruction (breakpoint).
+    /// Indicates whether the CPU should halt at the current instruction while stepping.
     /// Defaults to true so consumers can begin in a paused/stepping state.
-    pub is_breakpoint: bool,
+    pub is_stepping: bool,
 }
 
 impl NesCore {
@@ -29,7 +29,7 @@ impl NesCore {
             cpu: Cpu6502::new(Rc::clone(&bus)),
             // Take ownership of the initial bus.
             bus,
-            is_breakpoint: true,
+            is_stepping: true,
         }
     }
 
@@ -37,16 +37,14 @@ impl NesCore {
         self.cpu.run();
     }
 
+    /// Step forward one CPU tick.
     pub fn step(&mut self) {
         self.cpu.tick();
-        // Keep the emulator paused after a manual step.
-        self.is_breakpoint = true;
     }
 
     /// Advance exactly one instruction and remain paused afterward.
     pub fn step_instruction(&mut self) -> ExitReason {
         let has_more = self.cpu.tick();
-        self.is_breakpoint = true;
         if has_more {
             ExitReason::MaxTicks
         } else {
@@ -54,15 +52,10 @@ impl NesCore {
         }
     }
 
-    /// Resume running without stopping on a breakpoint.
-    pub fn resume(&mut self) {
-        self.is_breakpoint = false;
-    }
-
     /// Runs the CPU for at most one frame worth of work.
     pub fn frame(&mut self) -> ExitReason {
-        if self.is_breakpoint {
-            return ExitReason::MaxTicks;
+        if self.is_stepping {
+            return ExitReason::Breakpoint;
         }
         let frame_limit = self.cpu.tick_count + CPU_TICKS_PER_FRAME;
         self.cpu.max_ticks = Some(frame_limit);

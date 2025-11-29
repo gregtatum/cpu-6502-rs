@@ -123,7 +123,7 @@ impl NesFrontend {
             match self.nes_core.frame() {
                 // This will exit the entire program.
                 ExitReason::KIL => break,
-                ExitReason::BRK | ExitReason::MaxTicks => {}
+                ExitReason::BRK | ExitReason::MaxTicks | ExitReason::Breakpoint => {}
             }
 
             // What other integrations from SDL2 to egui do we want to support?
@@ -146,7 +146,7 @@ impl NesFrontend {
                 zero_page_snapshot,
                 &self.nes_core.cpu,
                 Some(&self.address_to_label),
-                self.nes_core.is_breakpoint,
+                self.nes_core.is_stepping,
             );
             self.widgets.draw(&self.gl, &full_output, &self.window);
 
@@ -163,10 +163,10 @@ impl NesFrontend {
                         }
                     }
                     InstructionsAction::Pause => {
-                        self.nes_core.is_breakpoint = true;
+                        self.nes_core.is_stepping = true;
                     }
                     InstructionsAction::Resume => {
-                        self.nes_core.resume();
+                        self.nes_core.is_stepping = false;
                     }
                 }
             }
@@ -290,7 +290,7 @@ struct Widgets {
     input: egui::RawInput,
     zero_page: ZeroPageWindow,
     instructions: InstructionsWindow,
-    last_breakpoint_state: bool,
+    last_is_stepping: bool,
 }
 
 impl Widgets {
@@ -322,7 +322,7 @@ impl Widgets {
             input: Default::default(),
             zero_page: ZeroPageWindow::new(),
             instructions: InstructionsWindow::new(),
-            last_breakpoint_state: true,
+            last_is_stepping: true,
         })
     }
 
@@ -360,7 +360,7 @@ impl Widgets {
             if self.instructions.is_open()
                 && self
                     .instructions
-                    .handle_key(*keycode, self.last_breakpoint_state)
+                    .handle_key(*keycode, self.last_is_stepping)
             {
                 return;
             }
@@ -481,7 +481,7 @@ impl Widgets {
         zero_page_snapshot: Option<[u8; 256]>,
         cpu: &nes_core::cpu_6502::Cpu6502,
         address_to_label: Option<&AddressToLabel>,
-        is_breakpoint: bool,
+        is_stepping: bool,
     ) -> FullOutput {
         let (draw_width, _draw_height) = window.drawable_size();
         let (logical_width, logical_height) = window.size();
@@ -507,12 +507,12 @@ impl Widgets {
         let zero_page_new = &mut self.zero_page;
         let instructions = &mut self.instructions;
         let zero_page_snapshot = zero_page_snapshot.map(Box::new);
-        self.last_breakpoint_state = is_breakpoint;
+        self.last_is_stepping = is_stepping;
         self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 zero_page_new.widget(ui, zero_page_snapshot.as_deref());
             });
-            instructions.widget(ctx, cpu, address_to_label, is_breakpoint);
+            instructions.widget(ctx, cpu, address_to_label, is_stepping);
         })
     }
 
