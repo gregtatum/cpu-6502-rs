@@ -23,6 +23,7 @@ pub struct InstructionsWindow {
     open: bool,
     executed_instructions: VecDeque<String>,
     pending_action: Option<InstructionsAction>,
+    scroll_to_bottom: bool,
 }
 
 impl InstructionsWindow {
@@ -31,6 +32,7 @@ impl InstructionsWindow {
             open: true,
             executed_instructions: VecDeque::new(),
             pending_action: None,
+            scroll_to_bottom: false,
         }
     }
 
@@ -110,6 +112,7 @@ impl InstructionsWindow {
                         if ui.button("Step").clicked() {
                             self.pending_action =
                                 Some(InstructionsAction::StepInstruction);
+                            self.scroll_to_bottom = true;
                         }
                     } else if ui.button("Pause").clicked() {
                         self.pending_action = Some(InstructionsAction::Pause);
@@ -132,7 +135,11 @@ impl InstructionsWindow {
                             text = text.color(ui.visuals().weak_text_color());
                         }
                         ui.label(text);
+                        if self.scroll_to_bottom && entry.is_current {
+                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                        }
                     }
+                    self.scroll_to_bottom = false;
                 });
             });
 
